@@ -8,6 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -28,14 +29,21 @@
       --glass:  rgba(3,7,18,0.78);
     }
 
-    html, body {
-      width:100%; height:100%; overflow:hidden;
+    html { height:100%; }
+    body {
+      min-height:100%; overflow-y:auto; overflow-x:hidden;
       background: var(--bg);
       color: var(--text);
       font-family: 'Space Grotesk', sans-serif;
     }
 
-    /* subtle scanlines */
+    /* scrollbar */
+    ::-webkit-scrollbar { width:4px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:rgba(0,255,136,0.2); border-radius:4px; }
+    ::-webkit-scrollbar-thumb:hover { background:rgba(0,255,136,0.4); }
+
+    /* scanlines */
     body::after {
       content:''; position:fixed; inset:0; z-index:200; pointer-events:none;
       background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 4px);
@@ -46,9 +54,9 @@
       display:block;
     }
 
-    /* subtle grid */
-    #root::before {
-      content:''; position:fixed; inset:0; z-index:1; pointer-events:none;
+    /* grid overlay */
+    #grid-overlay {
+      position:fixed; inset:0; z-index:1; pointer-events:none;
       background-image:
         linear-gradient(rgba(0,255,136,0.018) 1px, transparent 1px),
         linear-gradient(90deg, rgba(0,255,136,0.018) 1px, transparent 1px);
@@ -56,11 +64,11 @@
     }
 
     #root {
-      position:fixed; inset:0; z-index:10;
+      position:relative; z-index:10;
+      min-height:100vh;
       display:flex; flex-direction:column;
-      padding: 1.6rem 2rem 1.4rem;
+      padding: 1.6rem 2rem 2.5rem;
       gap: 1.1rem;
-      overflow:hidden;
       pointer-events:none;
     }
 
@@ -108,8 +116,8 @@
     /* ── Layout ──────────────────────────────────────── */
     .panels {
       display:flex; gap:1.2rem;
-      flex:1; min-height:0;
-      justify-content:center; align-items:flex-start;
+      flex-wrap:wrap;
+      justify-content:center; align-items:stretch;
       pointer-events:all;
     }
 
@@ -125,7 +133,6 @@
         0 24px 64px rgba(0,0,0,0.65),
         0 0 100px rgba(0,255,136,0.02);
     }
-    /* top inner glow line */
     .glass::after {
       content:''; position:absolute; top:0; left:8%; right:8%; height:1px;
       background:linear-gradient(90deg, transparent, rgba(0,255,136,0.25), transparent);
@@ -133,7 +140,8 @@
     }
 
     .control-panel { width:292px; flex-shrink:0; }
-    .result-panel  { width:356px; flex-shrink:0; }
+    .result-panel  { width:350px; flex-shrink:0; }
+    .chart-panel   { width:400px; flex-shrink:0; }
 
     /* ── Card header ─────────────────────────────────── */
     .card-head {
@@ -283,10 +291,142 @@
     .dots span:nth-child(2) { animation-delay:.2s; }
     .dots span:nth-child(3) { animation-delay:.4s; }
     @keyframes pop { 0%,60%,100%{transform:translateY(0);opacity:.3} 30%{transform:translateY(-6px);opacity:1} }
+
+    /* ── Chart Panel ─────────────────────────────────── */
+    .chart-tabs { display:flex; gap:0.4rem; }
+    .chart-tab {
+      flex:1; padding:0.3rem 0.4rem;
+      background:transparent;
+      border:1px solid var(--border);
+      border-radius:8px;
+      color:var(--muted);
+      font-family:'JetBrains Mono',monospace;
+      font-size:0.5rem; letter-spacing:0.16em;
+      cursor:pointer; transition:all 0.2s;
+      text-transform:uppercase;
+    }
+    .chart-tab:hover { border-color:rgba(0,255,136,0.2); color:var(--text); }
+    .chart-tab.active {
+      background:rgba(0,255,136,0.08);
+      border-color:rgba(0,255,136,0.3);
+      color:var(--green);
+    }
+    .chart-layers {
+      position:relative; flex:1; min-height:240px;
+    }
+    .chart-layer {
+      position:absolute; inset:0;
+      opacity:0; transition:opacity 0.28s;
+      pointer-events:none;
+    }
+    .chart-layer.active { opacity:1; pointer-events:all; }
+    .chart-caption {
+      font-family:'JetBrains Mono',monospace;
+      font-size:0.5rem; color:var(--muted);
+      text-align:center; letter-spacing:0.1em;
+    }
+
+    /* ── Suggestions Section ─────────────────────────── */
+    .suggestions {
+      display:flex; gap:0.9rem; flex-wrap:wrap;
+      justify-content:center;
+      pointer-events:all;
+      padding:0 0 1rem;
+    }
+    .sug-card {
+      flex:1; min-width:185px; max-width:235px;
+      padding:1rem 1.1rem; border-radius:16px;
+      background:var(--glass);
+      backdrop-filter:blur(30px); -webkit-backdrop-filter:blur(30px);
+      border:1px solid var(--border);
+      display:flex; flex-direction:column; gap:0.6rem;
+      position:relative; overflow:hidden;
+      box-shadow:0 16px 48px rgba(0,0,0,0.55);
+    }
+    .sug-card::after {
+      content:''; position:absolute; top:0; left:8%; right:8%; height:1px;
+      background:linear-gradient(90deg, transparent, rgba(0,255,136,0.18), transparent);
+      pointer-events:none;
+    }
+    .sug-title {
+      font-family:'JetBrains Mono',monospace;
+      font-size:0.51rem; letter-spacing:0.28em; color:var(--muted);
+    }
+    .sug-badge {
+      display:inline-flex; align-items:center;
+      padding:0.28rem 0.75rem; border-radius:100px;
+      font-family:'JetBrains Mono',monospace;
+      font-size:0.68rem; font-weight:600; letter-spacing:0.07em;
+    }
+    .sug-desc { font-size:0.61rem; color:var(--muted); line-height:1.55; }
+
+    /* moneyness gauge */
+    .money-gauge {
+      position:relative; height:4px;
+      background:linear-gradient(90deg, #f97316, rgba(168,85,247,0.8), #00ff88);
+      border-radius:100px; margin-top:0.1rem;
+    }
+    .money-needle {
+      position:absolute; top:-4px;
+      width:12px; height:12px; border-radius:50%;
+      background:#fff; border:2px solid var(--green);
+      transform:translateX(-50%);
+      box-shadow:0 0 10px rgba(0,255,136,0.65);
+      transition:left 0.6s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .money-labels {
+      display:flex; justify-content:space-between;
+      font-family:'JetBrains Mono',monospace;
+      font-size:0.48rem; color:var(--muted);
+    }
+
+    /* greek grid */
+    .greek-grid { display:flex; flex-direction:column; gap:0.38rem; }
+    .greek-row  { display:flex; justify-content:space-between; align-items:center; }
+    .greek-key  { font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:var(--muted); }
+    .greek-val  { font-family:'JetBrains Mono',monospace; font-size:0.64rem; font-weight:500; }
+
+    /* breakeven */
+    .be-block { display:flex; flex-direction:column; gap:0.12rem; }
+    .be-label { font-family:'JetBrains Mono',monospace; font-size:0.5rem; letter-spacing:0.2em; }
+    .be-price { font-family:'JetBrains Mono',monospace; font-size:1.25rem; font-weight:600; line-height:1; color:var(--text); }
+    .be-pct   { font-family:'JetBrains Mono',monospace; font-size:0.57rem; }
+    .be-divider { height:1px; background:var(--border); margin:0.15rem 0; }
+
+    /* strategy */
+    .strat-name { font-family:'JetBrains Mono',monospace; font-size:0.8rem; font-weight:600; letter-spacing:0.04em; }
+    .strat-box  {
+      padding:0.6rem 0.65rem; border-radius:10px;
+      display:flex; gap:0.5rem; align-items:flex-start;
+    }
+    .strat-icon { font-size:0.75rem; flex-shrink:0; margin-top:0.05rem; }
+    .strat-desc { font-size:0.59rem; color:var(--muted); line-height:1.5; }
+
+    /* risk */
+    .risk-score { display:flex; align-items:baseline; gap:0.12rem; }
+    .risk-num   { font-family:'JetBrains Mono',monospace; font-size:2.2rem; font-weight:700; line-height:1; }
+    .risk-denom { font-family:'JetBrains Mono',monospace; font-size:0.75rem; color:var(--muted); }
+    .risk-lbl   {
+      display:inline-flex; align-items:center;
+      padding:0.2rem 0.6rem; border-radius:100px;
+      font-family:'JetBrains Mono',monospace;
+      font-size:0.56rem; font-weight:600; letter-spacing:0.15em;
+    }
+    .risk-bars { display:flex; gap:3px; margin-top:0.15rem; }
+    .risk-seg   { flex:1; height:5px; border-radius:2px; transition:background 0.4s; }
+
+    /* section label */
+    .section-label {
+      text-align:center;
+      font-family:'JetBrains Mono',monospace;
+      font-size:0.55rem; letter-spacing:0.35em; color:var(--muted);
+      pointer-events:none;
+    }
   </style>
 </head>
 <body>
   <canvas id="bg"></canvas>
+  <div id="grid-overlay"></div>
   <div id="root"></div>
 
   <script type="text/babel">
@@ -328,6 +468,195 @@
         arr.push(S);
       }
       return arr;
+    }
+
+    function normalCDF(x) {
+      const a1=0.254829592, a2=-0.284496736, a3=1.421413741, a4=-1.453152027, a5=1.061405429, p=0.3275911;
+      const sign = x < 0 ? -1 : 1;
+      const t = 1 / (1 + p * Math.abs(x) / Math.SQRT2);
+      const y = 1 - (((((a5*t+a4)*t+a3)*t+a2)*t+a1)*t) * Math.exp(-x*x/2);
+      return 0.5 * (1 + sign * y);
+    }
+    function normalPDF(x) { return Math.exp(-0.5*x*x) / Math.sqrt(2*Math.PI); }
+
+    function bsGreeks(S, K, r, sigma, T) {
+      if (T <= 0 || sigma <= 0 || S <= 0 || K <= 0) return null;
+      const sq = Math.sqrt(T);
+      const d1 = (Math.log(S/K) + (r + 0.5*sigma*sigma)*T) / (sigma*sq);
+      const d2 = d1 - sigma*sq;
+      const Nd1 = normalCDF(d1), Nd2 = normalCDF(d2);
+      const phi = normalPDF(d1);
+      const df  = Math.exp(-r*T);
+      return {
+        callDelta: Nd1,
+        putDelta:  Nd1 - 1,
+        gamma:     phi / (S * sigma * sq),
+        vega:      S * phi * sq / 100,
+        callTheta: (-(S*phi*sigma)/(2*sq) - r*K*df*Nd2) / 365,
+        putTheta:  (-(S*phi*sigma)/(2*sq) + r*K*df*(1-Nd2)) / 365,
+      };
+    }
+
+    /* ═══════════════════════════════════════════════════
+       CHART.JS PLUGIN & CREATORS
+    ═══════════════════════════════════════════════════ */
+    const vlinePlugin = {
+      id: 'vline',
+      afterDraw(chart) {
+        const vls = chart.options.plugins?.vline?.lines;
+        if (!vls || !vls.length) return;
+        const ctx = chart.ctx;
+        const xs  = chart.scales.x;
+        const ys  = chart.scales.y;
+        vls.forEach(l => {
+          const px = xs.getPixelForValue(l.value);
+          ctx.save();
+          ctx.strokeStyle = l.color || 'rgba(255,255,255,0.3)';
+          ctx.lineWidth   = l.width || 1;
+          ctx.setLineDash(l.dash || []);
+          ctx.beginPath();
+          ctx.moveTo(px, ys.top);
+          ctx.lineTo(px, ys.bottom);
+          ctx.stroke();
+          if (l.label) {
+            ctx.fillStyle = l.color || 'rgba(255,255,255,0.3)';
+            ctx.font = '8px JetBrains Mono';
+            ctx.fillText(l.label, px + 4, ys.top + 12);
+          }
+          ctx.restore();
+        });
+      }
+    };
+    Chart.register(vlinePlugin);
+
+    const CHART_OPTS = {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 550, easing: 'easeOutCubic' },
+    };
+    const TICK_STYLE = { color:'rgba(226,232,240,0.38)', font:{ family:'JetBrains Mono', size:8 } };
+    const GRID_STYLE = { color:'rgba(255,255,255,0.04)' };
+    const TOOLTIP_STYLE = {
+      backgroundColor:'rgba(3,7,18,0.92)',
+      borderColor:'rgba(255,255,255,0.08)', borderWidth:1,
+      titleFont:{ family:'JetBrains Mono', size:9 },
+      bodyFont:{ family:'JetBrains Mono', size:9 },
+    };
+
+    function createPayoffChart(canvas, params, res) {
+      const { spot, strike } = params;
+      const { call, put } = res;
+      const N    = 120;
+      const minS = Math.max(1, strike * 0.3);
+      const maxS = strike * 2.2;
+      const step = (maxS - minS) / N;
+      const labels = [], callPnl = [], putPnl = [];
+      for (let i = 0; i <= N; i++) {
+        const s = minS + i * step;
+        labels.push(s.toFixed(0));
+        callPnl.push(+(Math.max(s - strike, 0) - call.price).toFixed(3));
+        putPnl.push(+(Math.max(strike - s, 0) - put.price).toFixed(3));
+      }
+      const strikeIdx = Math.round((strike - minS) / step);
+      const spotIdx   = Math.round((spot   - minS) / step);
+      return new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label:'Call P&L', data:callPnl, borderColor:'#00ff88', borderWidth:2, pointRadius:0, tension:0.1, fill:false },
+            { label:'Put P&L',  data:putPnl,  borderColor:'#f97316', borderWidth:2, pointRadius:0, tension:0.1, fill:false },
+            { label:'',         data:labels.map(()=>0), borderColor:'rgba(255,255,255,0.12)', borderWidth:1, borderDash:[2,4], pointRadius:0, fill:false },
+          ]
+        },
+        options: {
+          ...CHART_OPTS,
+          plugins: {
+            legend: { labels:{ color:'rgba(226,232,240,0.5)', font:{family:'JetBrains Mono',size:9}, filter:i=>i.text!=='', boxWidth:10 } },
+            tooltip: { ...TOOLTIP_STYLE, callbacks:{ title:c=>`S_T = $${c[0].label}`, label:c=>`${c.dataset.label}: $${c.raw.toFixed(2)}` } },
+            vline: { lines:[
+              { value:strikeIdx, color:'rgba(255,255,255,0.28)', dash:[4,4], label:`K=$${strike}` },
+              { value:spotIdx,   color:'rgba(0,212,255,0.45)',   dash:[4,4], label:`S=$${spot}` },
+            ]},
+          },
+          scales: {
+            x: { grid:GRID_STYLE, ticks:{ ...TICK_STYLE, maxTicksLimit:7, callback:(v,i,all)=> i%(Math.floor(all.length/6))||0?'':'$'+labels[i] } },
+            y: { grid:GRID_STYLE, ticks:{ ...TICK_STYLE, callback:v=>'$'+v.toFixed(1) } },
+          }
+        }
+      });
+    }
+
+    function createDistChart(canvas, params) {
+      const { spot, strike, rate, vol, maturity } = params;
+      const N     = 6000;
+      const drift = (rate - 0.5*vol*vol)*maturity;
+      const diff  = vol*Math.sqrt(maturity);
+      const prices = [];
+      for (let i = 0; i < N; i++) prices.push(spot * Math.exp(drift + diff * randn()));
+
+      const lo = Math.max(spot*0.15, Math.min(...prices));
+      const hi = Math.min(spot*3.5,  Math.max(...prices));
+      const nBins = 44, bsize = (hi - lo) / nBins;
+      const bins = Array(nBins).fill(0);
+      const centers = Array.from({length:nBins}, (_,i)=>lo+(i+0.5)*bsize);
+      prices.forEach(p=>{ const idx=Math.min(nBins-1,Math.max(0,Math.floor((p-lo)/bsize))); bins[idx]++; });
+
+      const colors = centers.map(c => c>=strike ? 'rgba(0,255,136,0.6)' : 'rgba(249,115,22,0.6)');
+      const strikeIdx = Math.round((strike - lo) / bsize - 0.5);
+      const spotIdx   = Math.round((spot   - lo) / bsize - 0.5);
+
+      return new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: centers.map(c=>c.toFixed(0)),
+          datasets: [{ label:'Frequency', data:bins, backgroundColor:colors, borderColor:colors.map(c=>c.replace('0.6','0.85')), borderWidth:0.5, barPercentage:1, categoryPercentage:1 }]
+        },
+        options: {
+          ...CHART_OPTS,
+          plugins: {
+            legend:{ display:false },
+            tooltip:{ ...TOOLTIP_STYLE, callbacks:{ title:c=>`S_T ≈ $${c[0].label}`, label:c=>`Count: ${c.raw}` } },
+            vline:{ lines:[
+              { value:strikeIdx, color:'rgba(255,255,255,0.38)', dash:[4,4], label:`K=$${strike}` },
+              { value:spotIdx,   color:'rgba(0,212,255,0.5)',    dash:[4,4], label:`S₀=$${spot}` },
+            ]},
+          },
+          scales: {
+            x: { grid:{display:false}, ticks:{ ...TICK_STYLE, maxTicksLimit:7, callback:(v,i)=> i%6===0 ? '$'+centers[i].toFixed(0) : '' } },
+            y: { grid:GRID_STYLE, ticks:TICK_STYLE },
+          }
+        }
+      });
+    }
+
+    function createPathsChart(canvas, params) {
+      const { spot, strike, rate, vol, maturity } = params;
+      const N_PATHS = 22, STEPS = 80;
+      const PALETTE = ['#00ff88','#00d4ff','#a855f7','#f97316','#ec4899','#3b82f6','#fbbf24','#10b981','#8b5cf6','#ef4444','#06b6d4','#84cc16','#f43f5e','#14b8a6','#6366f1','#00ff88','#00d4ff','#a855f7','#f97316','#ec4899','#3b82f6','#10b981'];
+      const labels   = Array.from({length:STEPS+1},(_,i)=>(i*maturity/STEPS).toFixed(2));
+      const datasets = Array.from({length:N_PATHS},(_,i)=>({
+        label:'', data:gbmPath(spot,rate,vol,maturity,STEPS),
+        borderColor:PALETTE[i]+'88', borderWidth:1.2, pointRadius:0, tension:0.18, fill:false,
+      }));
+      datasets.push({ label:`Strike K=$${strike}`, data:Array(STEPS+1).fill(strike), borderColor:'rgba(255,255,255,0.28)', borderWidth:1, borderDash:[4,4], pointRadius:0, fill:false });
+
+      return new Chart(canvas, {
+        type:'line',
+        data:{ labels, datasets },
+        options:{
+          ...CHART_OPTS,
+          plugins:{
+            legend:{ labels:{ filter:i=>i.text.startsWith('Strike'), color:'rgba(226,232,240,0.45)', font:{family:'JetBrains Mono',size:9}, boxWidth:10 } },
+            tooltip:{ enabled:false },
+            vline:{ lines:[] },
+          },
+          scales:{
+            x:{ grid:GRID_STYLE, ticks:{ ...TICK_STYLE, maxTicksLimit:6, callback:(_,i)=>parseFloat(labels[i]).toFixed(1)+'y' } },
+            y:{ grid:GRID_STYLE, ticks:{ ...TICK_STYLE, callback:v=>'$'+v.toFixed(0) } },
+          }
+        }
+      });
     }
 
     /* ═══════════════════════════════════════════════════
@@ -389,8 +718,6 @@
         this.ico1 = add(10, 1, 0x00ff88, 0.055);
         this.ico2 = add( 6, 1, 0x00d4ff, 0.095);
         this.ico3 = add( 3, 1, 0xa855f7, 0.16);
-
-        // Torus ring
         this.ring = new THREE.Mesh(
           new THREE.TorusGeometry(14, 0.06, 8, 120),
           new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.12 })
@@ -406,11 +733,7 @@
             new THREE.SphereGeometry(0.3 + Math.random() * 0.5, 16, 16),
             new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.45 })
           );
-          m.position.set(
-            (Math.random() - 0.5) * 32,
-            (Math.random() - 0.5) * 20,
-            -8 + (Math.random() - 0.5) * 10
-          );
+          m.position.set((Math.random()-0.5)*32, (Math.random()-0.5)*20, -8+(Math.random()-0.5)*10);
           this._orbPh.push(Math.random() * Math.PI * 2);
           this.scene.add(m);
           return m;
@@ -418,45 +741,19 @@
       }
 
       buildPaths(r, sigma, T) {
-        this.pathMeshes.forEach(m => {
-          this.scene.remove(m);
-          m.geometry.dispose();
-          m.material.dispose();
-        });
+        this.pathMeshes.forEach(m => { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); });
         this.pathMeshes = [];
-
-        const PALETTE = [
-          0x00ff88, 0x00d4ff, 0xa855f7, 0xf97316, 0xec4899,
-          0x3b82f6, 0xfbbf24, 0x10b981, 0x8b5cf6, 0xef4444,
-          0x06b6d4, 0x84cc16, 0xf43f5e, 0x14b8a6, 0x6366f1,
-          0x00ff88, 0x00d4ff, 0xa855f7, 0xf97316, 0xec4899,
-          0x3b82f6, 0x10b981,
-        ];
-
-        const N = 22, STEPS = 64, XL = -14, XR = 14;
-
-        for (let i = 0; i < N; i++) {
-          const prices  = gbmPath(100, r, sigma, T, STEPS);
-          const zOff    = -22 + (i / N) * 44;
-          const minP    = Math.min(...prices);
-          const maxP    = Math.max(...prices);
-          const range   = maxP - minP || 1;
-          const yScale  = 11;
-
-          const pts = prices.map((p, j) => new THREE.Vector3(
-            XL + (j / STEPS) * (XR - XL),
-            ((p - minP) / range - 0.5) * yScale,
-            zOff
-          ));
-
-          const curve = new THREE.CatmullRomCurve3(pts);
-          const geom  = new THREE.TubeGeometry(curve, 64, 0.038, 6, false);
-          const mat   = new THREE.MeshBasicMaterial({
-            color: PALETTE[i % PALETTE.length],
-            transparent: true,
-            opacity: 0.5 + Math.random() * 0.35,
-          });
-          const mesh = new THREE.Mesh(geom, mat);
+        const PALETTE = [0x00ff88,0x00d4ff,0xa855f7,0xf97316,0xec4899,0x3b82f6,0xfbbf24,0x10b981,0x8b5cf6,0xef4444,0x06b6d4,0x84cc16,0xf43f5e,0x14b8a6,0x6366f1,0x00ff88,0x00d4ff,0xa855f7,0xf97316,0xec4899,0x3b82f6,0x10b981];
+        const N=22, STEPS=64, XL=-14, XR=14;
+        for (let i=0; i<N; i++) {
+          const prices=gbmPath(100,r,sigma,T,STEPS);
+          const zOff=-22+(i/N)*44;
+          const minP=Math.min(...prices), maxP=Math.max(...prices), range=maxP-minP||1;
+          const pts=prices.map((p,j)=>new THREE.Vector3(XL+(j/STEPS)*(XR-XL),((p-minP)/range-0.5)*11,zOff));
+          const curve=new THREE.CatmullRomCurve3(pts);
+          const geom=new THREE.TubeGeometry(curve,64,0.038,6,false);
+          const mat=new THREE.MeshBasicMaterial({ color:PALETTE[i%PALETTE.length], transparent:true, opacity:0.5+Math.random()*0.35 });
+          const mesh=new THREE.Mesh(geom,mat);
           this.pathMeshes.push(mesh);
           this.scene.add(mesh);
         }
@@ -465,40 +762,21 @@
       _tick() {
         this.raf = requestAnimationFrame(() => this._tick());
         this.t += 0.0038;
-
-        this.stars.rotation.y = this.t * 0.012;
-        this.stars.rotation.x = this.t * 0.006;
-
-        this.ico1.rotation.x =  this.t * 0.22;
-        this.ico1.rotation.y =  this.t * 0.31;
-        this.ico2.rotation.x = -this.t * 0.35;
-        this.ico2.rotation.y =  this.t * 0.26;
-        this.ico3.rotation.x =  this.t * 0.48;
-        this.ico3.rotation.z = -this.t * 0.38;
-        this.ring.rotation.z =  this.t * 0.18;
-
-        this.orbs.forEach((orb, i) => {
-          orb.position.y += Math.sin(this.t * 0.45 + this._orbPh[i]) * 0.005;
-          orb.rotation.x = this.t * 0.3;
-        });
-
-        this.pathMeshes.forEach((m, i) => {
-          m.position.y = Math.sin(this.t * 0.28 + i * 0.38) * 0.35;
-        });
-
-        // Lazy camera drift
-        this.camera.position.x = Math.sin(this.t * 0.065) * 4.5;
-        this.camera.position.y = Math.sin(this.t * 0.048) * 2.8;
-        this.camera.lookAt(0, 0, 0);
-
+        this.stars.rotation.y = this.t*0.012;
+        this.stars.rotation.x = this.t*0.006;
+        this.ico1.rotation.x =  this.t*0.22; this.ico1.rotation.y =  this.t*0.31;
+        this.ico2.rotation.x = -this.t*0.35; this.ico2.rotation.y =  this.t*0.26;
+        this.ico3.rotation.x =  this.t*0.48; this.ico3.rotation.z = -this.t*0.38;
+        this.ring.rotation.z =  this.t*0.18;
+        this.orbs.forEach((orb,i) => { orb.position.y += Math.sin(this.t*0.45+this._orbPh[i])*0.005; orb.rotation.x=this.t*0.3; });
+        this.pathMeshes.forEach((m,i) => { m.position.y=Math.sin(this.t*0.28+i*0.38)*0.35; });
+        this.camera.position.x = Math.sin(this.t*0.065)*4.5;
+        this.camera.position.y = Math.sin(this.t*0.048)*2.8;
+        this.camera.lookAt(0,0,0);
         this.renderer.render(this.scene, this.camera);
       }
 
-      destroy() {
-        cancelAnimationFrame(this.raf);
-        window.removeEventListener('resize', this._onResize);
-        this.renderer.dispose();
-      }
+      destroy() { cancelAnimationFrame(this.raf); window.removeEventListener('resize',this._onResize); this.renderer.dispose(); }
     }
 
     /* ═══════════════════════════════════════════════════
@@ -507,16 +785,13 @@
     function AnimNum({ value, dec = 4, pre = '' }) {
       const ref  = useRef(null);
       const prev = useRef(value);
-
       useEffect(() => {
         const obj = { v: prev.current };
-        gsap.to(obj, {
-          v: value, duration: 1.0, ease: 'power2.out',
+        gsap.to(obj, { v:value, duration:1.0, ease:'power2.out',
           onUpdate() { if (ref.current) ref.current.textContent = pre + obj.v.toFixed(dec); },
           onComplete() { prev.current = value; },
         });
       }, [value, dec, pre]);
-
       return <span ref={ref}>{pre}{value.toFixed(dec)}</span>;
     }
 
@@ -532,9 +807,217 @@
             <span className="s-val">{fmt(value)}</span>
           </div>
           <div className="s-track">
-            <div className="s-fill" style={{ width: `${pct}%` }} />
-            <input type="range" min={min} max={max} step={step} value={value}
-              onChange={e => onChange(+e.target.value)} />
+            <div className="s-fill" style={{ width:`${pct}%` }} />
+            <input type="range" min={min} max={max} step={step} value={value} onChange={e=>onChange(+e.target.value)} />
+          </div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
+       CHART PANEL
+    ═══════════════════════════════════════════════════ */
+    function ChartPanel({ params, res }) {
+      const [tab, setTab] = useState('payoff');
+      const payoffRef = useRef(null);
+      const distRef   = useRef(null);
+      const pathsRef  = useRef(null);
+      const charts    = useRef({});
+
+      useEffect(() => {
+        if (!res) return;
+        // destroy previous
+        Object.values(charts.current).forEach(c => c?.destroy());
+        charts.current = {};
+        if (payoffRef.current) charts.current.payoff = createPayoffChart(payoffRef.current, params, res);
+        if (distRef.current)   charts.current.dist   = createDistChart(distRef.current, params);
+        if (pathsRef.current)  charts.current.paths  = createPathsChart(pathsRef.current, params);
+        return () => { Object.values(charts.current).forEach(c=>c?.destroy()); charts.current={}; };
+      }, [res]);
+
+      const captions = {
+        payoff: 'P&L at expiry — green: call, orange: put  |  dashed: Strike & Spot',
+        dist:   'Terminal price distribution · green: call ITM · orange: put ITM',
+        paths:  `${22} simulated GBM paths to T=${params.maturity}y · dashed: Strike`,
+      };
+
+      return (
+        <div className="glass chart-panel">
+          <div className="card-head">
+            <span className="card-tag">Analytics Charts</span>
+            <div className={`sdot ${res ? 'live' : ''}`} />
+          </div>
+          <div className="chart-tabs">
+            {[['payoff','PAYOFF'],['dist','DISTRIBUTION'],['paths','PATHS']].map(([k,label])=>(
+              <button key={k} className={`chart-tab${tab===k?' active':''}`} onClick={()=>setTab(k)}>{label}</button>
+            ))}
+          </div>
+          <div className="chart-layers">
+            <div className={`chart-layer${tab==='payoff'?' active':''}`}><canvas ref={payoffRef}/></div>
+            <div className={`chart-layer${tab==='dist'  ?' active':''}`}><canvas ref={distRef}/></div>
+            <div className={`chart-layer${tab==='paths' ?' active':''}`}><canvas ref={pathsRef}/></div>
+            {!res && <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <div className="dots"><span/><span/><span/></div>
+            </div>}
+          </div>
+          {res && <div className="chart-caption">{captions[tab]}</div>}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
+       SUGGESTIONS PANEL
+    ═══════════════════════════════════════════════════ */
+    function SuggestionsPanel({ params, res }) {
+      const { spot, strike, rate, vol, maturity } = params;
+      const { call, put } = res;
+      const g = bsGreeks(spot, strike, rate, vol, maturity);
+
+      // Moneyness
+      const mPct = ((spot / strike) - 1) * 100;
+      const moneyLabel = Math.abs(mPct) < 2 ? 'ATM' : mPct > 15 ? 'DEEP ITM' : mPct > 0 ? 'IN THE MONEY' : mPct < -15 ? 'DEEP OTM' : 'OUT OF MONEY';
+      const moneyColor = Math.abs(mPct) < 2 ? '#a855f7' : mPct > 0 ? '#00ff88' : '#f97316';
+      const moneyDesc  = Math.abs(mPct)<2 ? 'Maximum gamma — highest sensitivity to price moves' :
+                         mPct>15  ? 'High delta position, behaves like long stock with protection' :
+                         mPct>0   ? 'Intrinsic value present, lower time-value premium' :
+                         mPct<-15 ? 'Pure time value, needs a large move to be profitable' :
+                                    'Needs a meaningful price move to generate profit';
+      const needleLeft = Math.max(5, Math.min(95, 50 + mPct * 1.6));
+
+      // Breakeven
+      const callBE    = strike + call.price;
+      const putBE     = Math.max(0, strike - put.price);
+      const callBEPct = ((callBE / spot) - 1) * 100;
+      const putBEPct  = ((putBE  / spot) - 1) * 100;
+
+      // Vol regime
+      const vp = vol * 100;
+      const volLabel = vp<15?'LOW':vp<30?'MODERATE':vp<50?'HIGH':'EXTREME';
+      const volColor = vp<15?'#00ff88':vp<30?'#00d4ff':vp<50?'#f97316':'#ec4899';
+
+      // Strategy signal
+      let strat, stratDesc, stratColor;
+      if (vp > 50) {
+        strat='SELL STRADDLE'; stratColor='#f97316';
+        stratDesc='Extreme vol — sell premium, profit from mean reversion and theta decay';
+      } else if (vp < 15) {
+        strat='BUY STRADDLE'; stratColor='#00d4ff';
+        stratDesc='Low vol — options are cheap, go long volatility before a catalyst';
+      } else if (mPct > 10) {
+        strat='COVERED CALL'; stratColor='#00ff88';
+        stratDesc='ITM territory — sell upside via covered call to monetize existing gains';
+      } else if (mPct < -10) {
+        strat='BULL CALL SPREAD'; stratColor='#a855f7';
+        stratDesc='Deep OTM exposure — cap risk and cost with a vertical spread';
+      } else {
+        strat='IRON CONDOR'; stratColor='#ec4899';
+        stratDesc='Near ATM — collect theta, profit from a range-bound, low-move environment';
+      }
+
+      // Risk score
+      const riskScore = Math.min(10, Math.max(1, Math.round(vol*11 + Math.abs(mPct)/14 + maturity*0.4)));
+      const riskColor = riskScore<=3?'#00ff88':riskScore<=5?'#00d4ff':riskScore<=7?'#f97316':'#ec4899';
+      const riskLabel = riskScore<=3?'LOW':riskScore<=5?'MEDIUM':riskScore<=7?'HIGH':'EXTREME';
+
+      return (
+        <div className="suggestions">
+
+          {/* Moneyness */}
+          <div className="sug-card">
+            <div className="sug-title">MONEYNESS</div>
+            <div className="sug-badge" style={{background:moneyColor+'18',color:moneyColor,border:`1px solid ${moneyColor}44`}}>
+              {mPct>0?'+':''}{mPct.toFixed(1)}% &nbsp; {moneyLabel}
+            </div>
+            <div className="sug-desc">{moneyDesc}</div>
+            <div className="money-gauge">
+              <div className="money-needle" style={{left:`${needleLeft}%`}} />
+            </div>
+            <div className="money-labels"><span>DEEP OTM</span><span>ATM</span><span>DEEP ITM</span></div>
+          </div>
+
+          {/* Greeks */}
+          <div className="sug-card">
+            <div className="sug-title">BS GREEKS</div>
+            {g ? (
+              <div className="greek-grid">
+                <div className="greek-row">
+                  <span className="greek-key">Δ Call</span>
+                  <span className="greek-val" style={{color:'#00ff88'}}>{g.callDelta.toFixed(4)}</span>
+                </div>
+                <div className="greek-row">
+                  <span className="greek-key">Δ Put</span>
+                  <span className="greek-val" style={{color:'#f97316'}}>{g.putDelta.toFixed(4)}</span>
+                </div>
+                <div className="greek-row">
+                  <span className="greek-key">Γ (Gamma)</span>
+                  <span className="greek-val" style={{color:'#00d4ff'}}>{g.gamma.toFixed(5)}</span>
+                </div>
+                <div className="greek-row">
+                  <span className="greek-key">θ Call/day</span>
+                  <span className="greek-val" style={{color:'#ec4899'}}>${g.callTheta.toFixed(4)}</span>
+                </div>
+                <div className="greek-row">
+                  <span className="greek-key">ν Vega/1%σ</span>
+                  <span className="greek-val" style={{color:'#a855f7'}}>${g.vega.toFixed(4)}</span>
+                </div>
+              </div>
+            ) : <div className="sug-desc">N/A for current parameters</div>}
+          </div>
+
+          {/* Breakeven */}
+          <div className="sug-card">
+            <div className="sug-title">BREAKEVEN PRICES</div>
+            <div className="be-block">
+              <div className="be-label" style={{color:'#00ff88'}}>CALL</div>
+              <div className="be-price">${callBE.toFixed(2)}</div>
+              <div className="be-pct" style={{color:callBEPct>0?'#f97316':'#00ff88'}}>
+                {callBEPct>0?'+':''}{callBEPct.toFixed(1)}% from current spot
+              </div>
+            </div>
+            <div className="be-divider"/>
+            <div className="be-block">
+              <div className="be-label" style={{color:'#f97316'}}>PUT</div>
+              <div className="be-price">${putBE.toFixed(2)}</div>
+              <div className="be-pct" style={{color:putBEPct<0?'#f97316':'#00ff88'}}>
+                {putBEPct.toFixed(1)}% from current spot
+              </div>
+            </div>
+            <div className="sug-desc" style={{marginTop:'0.2rem'}}>Stock must reach these levels at expiry to break even</div>
+          </div>
+
+          {/* Strategy */}
+          <div className="sug-card">
+            <div className="sug-title">STRATEGY SIGNAL</div>
+            <div className="strat-name" style={{color:stratColor}}>{strat}</div>
+            <div className="strat-box" style={{background:stratColor+'14',border:`1px solid ${stratColor}38`}}>
+              <div className="strat-icon" style={{color:stratColor}}>◆</div>
+              <div className="strat-desc">{stratDesc}</div>
+            </div>
+            <div className="greek-row">
+              <span className="greek-key">Vol Regime</span>
+              <span className="greek-val" style={{color:volColor}}>{volLabel} ({vp.toFixed(0)}%)</span>
+            </div>
+          </div>
+
+          {/* Risk */}
+          <div className="sug-card">
+            <div className="sug-title">RISK ASSESSMENT</div>
+            <div className="risk-score">
+              <span className="risk-num" style={{color:riskColor}}>{riskScore}</span>
+              <span className="risk-denom">/10</span>
+            </div>
+            <div className="risk-lbl" style={{color:riskColor,background:riskColor+'18',border:`1px solid ${riskColor}44`}}>
+              {riskLabel}
+            </div>
+            <div className="risk-bars">
+              {Array(10).fill(0).map((_,i)=>(
+                <div key={i} className="risk-seg" style={{background:i<riskScore?riskColor:'rgba(255,255,255,0.05)'}}/>
+              ))}
+            </div>
+            <div className="greek-row" style={{marginTop:'0.2rem'}}>
+              <span className="greek-key">T to Maturity</span>
+              <span className="greek-val" style={{color:'#00d4ff'}}>{maturity.toFixed(1)} yr</span>
+            </div>
           </div>
         </div>
       );
@@ -546,9 +1029,7 @@
     function App() {
       const scene3d = useRef(null);
 
-      const [params, setParams] = useState({
-        spot: 100, strike: 100, rate: 0.05, vol: 0.20, maturity: 1.0, n: 50000
-      });
+      const [params, setParams] = useState({ spot:100, strike:100, rate:0.05, vol:0.20, maturity:1.0, n:50000 });
       const [res,  setRes]  = useState(null);
       const [busy, setBusy] = useState(false);
 
@@ -556,26 +1037,13 @@
         const canvas = document.getElementById('bg');
         scene3d.current = new Scene3D(canvas);
 
-        // Entrance animations
-        gsap.fromTo('.header',
-          { y: -44, opacity: 0 },
-          { y: 0, opacity: 1, duration: 1.05, ease: 'power3.out', delay: 0.1 }
-        );
-        gsap.fromTo('.control-panel',
-          { x: -55, opacity: 0 },
-          { x: 0, opacity: 1, duration: 0.95, ease: 'power3.out', delay: 0.45 }
-        );
-        gsap.fromTo('.result-panel',
-          { x: 55, opacity: 0 },
-          { x: 0, opacity: 1, duration: 0.95, ease: 'power3.out', delay: 0.65 }
-        );
+        gsap.fromTo('.header',       {y:-44,opacity:0},{y:0,opacity:1,duration:1.05,ease:'power3.out',delay:0.1});
+        gsap.fromTo('.control-panel',{x:-55,opacity:0},{x:0,opacity:1,duration:0.95,ease:'power3.out',delay:0.45});
+        gsap.fromTo('.result-panel', {x: 55,opacity:0},{x:0,opacity:1,duration:0.95,ease:'power3.out',delay:0.65});
+        gsap.fromTo('.chart-panel',  {x: 55,opacity:0},{x:0,opacity:1,duration:0.95,ease:'power3.out',delay:0.8});
 
-        // Auto-run
-        const timer = setTimeout(() => runSim({ spot:100, strike:100, rate:0.05, vol:0.20, maturity:1.0, n:50000 }), 1500);
-        return () => {
-          clearTimeout(timer);
-          scene3d.current?.destroy();
-        };
+        const timer = setTimeout(()=>runSim({spot:100,strike:100,rate:0.05,vol:0.20,maturity:1.0,n:50000}),1500);
+        return () => { clearTimeout(timer); scene3d.current?.destroy(); };
       }, []);
 
       const runSim = useCallback((p) => {
@@ -586,72 +1054,60 @@
           const df   = Math.exp(-p.rate * p.maturity);
           const lhs  = call.price - put.price;
           const rhs  = p.spot - p.strike * df;
-          setRes({ call, put, lhs, rhs, err: Math.abs(lhs - rhs) });
+          setRes({ call, put, lhs, rhs, err:Math.abs(lhs-rhs) });
           setBusy(false);
 
           scene3d.current?.buildPaths(p.rate, p.vol, p.maturity);
 
-          gsap.fromTo('.opt-card',
-            { y: 10, opacity: 0 },
-            { y: 0, opacity: 1, stagger: 0.07, duration: 0.5, ease: 'back.out(1.5)' }
-          );
-          gsap.fromTo('.parity, .sim-info',
-            { y: 8, opacity: 0 },
-            { y: 0, opacity: 1, stagger: 0.06, duration: 0.45, ease: 'power2.out', delay: 0.15 }
-          );
+          gsap.fromTo('.opt-card',      {y:10,opacity:0},{y:0,opacity:1,stagger:0.07,duration:0.5,ease:'back.out(1.5)'});
+          gsap.fromTo('.parity,.sim-info',{y:8,opacity:0},{y:0,opacity:1,stagger:0.06,duration:0.45,ease:'power2.out',delay:0.15});
+          gsap.fromTo('.sug-card',      {y:20,opacity:0},{y:0,opacity:1,stagger:0.07,duration:0.55,ease:'back.out(1.4)',delay:0.2});
+          gsap.fromTo('.section-label', {opacity:0},{opacity:1,duration:0.6,delay:0.1});
         }, 30);
       }, []);
 
       const set = (k, v) => setParams(p => ({ ...p, [k]: v }));
 
       const handleRun = () => {
-        gsap.to('.run-btn', { scale: 0.95, duration: 0.09, yoyo: true, repeat: 1, ease: 'power1.inOut' });
+        gsap.to('.run-btn', { scale:0.95, duration:0.09, yoyo:true, repeat:1, ease:'power1.inOut' });
         runSim(params);
       };
 
-      const confPct = (se, price) =>
-        price ? Math.max(6, Math.min(94, (1 - Math.min(se / price * 25, 1)) * 100)) : 50;
+      const confPct = (se, price) => price ? Math.max(6, Math.min(94, (1 - Math.min(se/price*25,1))*100)) : 50;
 
       return (
         <>
-          {/* ── Header ── */}
+          {/* Header */}
           <header className="header">
-            <div className="badge"><span className="badge-dot" />QUANTITATIVE FINANCE</div>
+            <div className="badge"><span className="badge-dot"/>QUANTITATIVE FINANCE</div>
             <h1>MONTE CARLO ENGINE</h1>
             <p className="subtitle">Options Pricing via Geometric Brownian Motion</p>
             <div className="header-tags">
-              <span>European Options</span>
-              <span className="tag-sep">·</span>
-              <span>Risk-Neutral Pricing</span>
-              <span className="tag-sep">·</span>
+              <span>European Options</span><span className="tag-sep">·</span>
+              <span>Risk-Neutral Pricing</span><span className="tag-sep">·</span>
               <span>GBM Simulation</span>
             </div>
           </header>
 
-          {/* ── Panels ── */}
+          {/* Main panels */}
           <div className="panels">
 
             {/* Controls */}
             <div className="glass control-panel">
               <div className="card-head">
                 <span className="card-tag">Market Parameters</span>
-                <div className="sdot" />
+                <div className="sdot"/>
               </div>
-
               <div className="slider-list">
-                <Slider label="Spot Price"       value={params.spot}     min={20}   max={300}   step={1}     fmt={v=>`$${v}`}                   onChange={v=>set('spot',v)} />
-                <Slider label="Strike Price"     value={params.strike}   min={20}   max={300}   step={1}     fmt={v=>`$${v}`}                   onChange={v=>set('strike',v)} />
-                <Slider label="Risk-free Rate"   value={params.rate}     min={0}    max={0.20}  step={0.001} fmt={v=>`${(v*100).toFixed(1)}%`}  onChange={v=>set('rate',v)} />
-                <Slider label="Volatility σ"     value={params.vol}      min={0.05} max={0.85}  step={0.01}  fmt={v=>`${(v*100).toFixed(0)}%`}  onChange={v=>set('vol',v)} />
-                <Slider label="Time to Maturity" value={params.maturity} min={0.1}  max={3.0}   step={0.1}   fmt={v=>`${v.toFixed(1)} yr`}      onChange={v=>set('maturity',v)} />
-                <Slider label="Simulations"      value={params.n}        min={1000} max={100000} step={1000} fmt={v=>`${(v/1000).toFixed(0)}K`} onChange={v=>set('n',v)} />
+                <Slider label="Spot Price"       value={params.spot}     min={20}    max={300}    step={1}     fmt={v=>`$${v}`}                  onChange={v=>set('spot',v)}/>
+                <Slider label="Strike Price"     value={params.strike}   min={20}    max={300}    step={1}     fmt={v=>`$${v}`}                  onChange={v=>set('strike',v)}/>
+                <Slider label="Risk-free Rate"   value={params.rate}     min={0}     max={0.20}   step={0.001} fmt={v=>`${(v*100).toFixed(1)}%`} onChange={v=>set('rate',v)}/>
+                <Slider label="Volatility σ"     value={params.vol}      min={0.05}  max={0.85}   step={0.01}  fmt={v=>`${(v*100).toFixed(0)}%`} onChange={v=>set('vol',v)}/>
+                <Slider label="Time to Maturity" value={params.maturity} min={0.1}   max={3.0}    step={0.1}   fmt={v=>`${v.toFixed(1)} yr`}     onChange={v=>set('maturity',v)}/>
+                <Slider label="Simulations"      value={params.n}        min={1000}  max={100000} step={1000}  fmt={v=>`${(v/1000).toFixed(0)}K`} onChange={v=>set('n',v)}/>
               </div>
-
               <button className="run-btn" onClick={handleRun} disabled={busy}>
-                {busy
-                  ? <><span className="spin" />COMPUTING…</>
-                  : <>▶ &nbsp;RUN SIMULATION</>
-                }
+                {busy ? <><span className="spin"/>COMPUTING…</> : <>▶ &nbsp;RUN SIMULATION</>}
               </button>
             </div>
 
@@ -659,85 +1115,55 @@
             <div className="glass result-panel">
               <div className="card-head">
                 <span className="card-tag">Results</span>
-                <div className={`sdot ${res ? 'live' : ''}`} />
+                <div className={`sdot ${res?'live':''}`}/>
               </div>
-
               {res ? (
                 <>
                   <div className="opt-grid">
-                    {/* Call */}
                     <div className="opt-card">
                       <div className="opt-type">CALL OPTION</div>
-                      <div className="opt-price call">
-                        <AnimNum value={res.call.price} dec={4} pre="$" />
-                      </div>
-                      <div className="opt-se">
-                        σ̂ = <AnimNum value={res.call.se} dec={5} pre="$" />
-                      </div>
-                      <div className="opt-ci">
-                        95% CI: [<AnimNum value={res.call.ci[0]} dec={3} pre="$" />,&nbsp;
-                        <AnimNum value={res.call.ci[1]} dec={3} pre="$" />]
-                      </div>
-                      <div className="opt-bar">
-                        <div className="opt-bar-fill call" style={{ width: `${confPct(res.call.se, res.call.price)}%` }} />
-                      </div>
+                      <div className="opt-price call"><AnimNum value={res.call.price} dec={4} pre="$"/></div>
+                      <div className="opt-se">σ̂ = <AnimNum value={res.call.se} dec={5} pre="$"/></div>
+                      <div className="opt-ci">95% CI: [<AnimNum value={res.call.ci[0]} dec={3} pre="$"/>,&nbsp;<AnimNum value={res.call.ci[1]} dec={3} pre="$"/>]</div>
+                      <div className="opt-bar"><div className="opt-bar-fill call" style={{width:`${confPct(res.call.se,res.call.price)}%`}}/></div>
                     </div>
-
-                    {/* Put */}
                     <div className="opt-card">
                       <div className="opt-type">PUT OPTION</div>
-                      <div className="opt-price put">
-                        <AnimNum value={res.put.price} dec={4} pre="$" />
-                      </div>
-                      <div className="opt-se">
-                        σ̂ = <AnimNum value={res.put.se} dec={5} pre="$" />
-                      </div>
-                      <div className="opt-ci">
-                        95% CI: [<AnimNum value={res.put.ci[0]} dec={3} pre="$" />,&nbsp;
-                        <AnimNum value={res.put.ci[1]} dec={3} pre="$" />]
-                      </div>
-                      <div className="opt-bar">
-                        <div className="opt-bar-fill put" style={{ width: `${confPct(res.put.se, res.put.price)}%` }} />
-                      </div>
+                      <div className="opt-price put"><AnimNum value={res.put.price} dec={4} pre="$"/></div>
+                      <div className="opt-se">σ̂ = <AnimNum value={res.put.se} dec={5} pre="$"/></div>
+                      <div className="opt-ci">95% CI: [<AnimNum value={res.put.ci[0]} dec={3} pre="$"/>,&nbsp;<AnimNum value={res.put.ci[1]} dec={3} pre="$"/>]</div>
+                      <div className="opt-bar"><div className="opt-bar-fill put" style={{width:`${confPct(res.put.se,res.put.price)}%`}}/></div>
                     </div>
                   </div>
-
-                  {/* Put-Call Parity */}
                   <div className="parity">
                     <div className="parity-title">PUT-CALL PARITY CHECK</div>
-                    <div className="p-row">
-                      <span className="p-key">C − P</span>
-                      <span className="p-val"><AnimNum value={res.lhs} dec={4} pre="$" /></span>
-                    </div>
-                    <div className="p-row">
-                      <span className="p-key">S − K · e⁻ʳᵀ</span>
-                      <span className="p-val"><AnimNum value={res.rhs} dec={4} pre="$" /></span>
-                    </div>
-                    <div className="p-row err">
-                      <span className="p-key">Δ error</span>
-                      <span className={`p-val ${res.err < 0.15 ? 'ok' : 'warn'}`}>
-                        <AnimNum value={res.err} dec={6} pre="$" />
-                      </span>
-                    </div>
+                    <div className="p-row"><span className="p-key">C − P</span><span className="p-val"><AnimNum value={res.lhs} dec={4} pre="$"/></span></div>
+                    <div className="p-row"><span className="p-key">S − K · e⁻ʳᵀ</span><span className="p-val"><AnimNum value={res.rhs} dec={4} pre="$"/></span></div>
+                    <div className="p-row err"><span className="p-key">Δ error</span><span className={`p-val ${res.err<0.15?'ok':'warn'}`}><AnimNum value={res.err} dec={6} pre="$"/></span></div>
                   </div>
-
-                  <div className="sim-info">
-                    <span>Monte Carlo paths:</span>
-                    <span className="sim-n">{params.n.toLocaleString()}</span>
-                  </div>
+                  <div className="sim-info"><span>Monte Carlo paths:</span><span className="sim-n">{params.n.toLocaleString()}</span></div>
                 </>
               ) : (
-                <div className="empty">
-                  <div className="dots"><span /><span /><span /></div>
-                </div>
+                <div className="empty"><div className="dots"><span/><span/><span/></div></div>
               )}
             </div>
+
+            {/* Charts */}
+            <ChartPanel params={params} res={res}/>
           </div>
+
+          {/* Suggestions */}
+          {res && (
+            <>
+              <div className="section-label">── ANALYSIS &amp; SUGGESTIONS ──</div>
+              <SuggestionsPanel params={params} res={res}/>
+            </>
+          )}
         </>
       );
     }
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
   </script>
 </body>
 </html>
