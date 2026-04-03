@@ -27,34 +27,24 @@
       --muted:  rgba(226,232,240,0.45);
       --border: rgba(255,255,255,0.07);
       --glass:  rgba(3,7,18,0.78);
+      --accent: #00ff88;
     }
 
     html { height:100%; }
     body {
       min-height:100%; overflow-y:auto; overflow-x:hidden;
-      background: var(--bg);
-      color: var(--text);
+      background: var(--bg); color: var(--text);
       font-family: 'Space Grotesk', sans-serif;
     }
-
-    /* scrollbar */
     ::-webkit-scrollbar { width:4px; }
     ::-webkit-scrollbar-track { background:transparent; }
     ::-webkit-scrollbar-thumb { background:rgba(0,255,136,0.2); border-radius:4px; }
-    ::-webkit-scrollbar-thumb:hover { background:rgba(0,255,136,0.4); }
 
-    /* scanlines */
     body::after {
       content:''; position:fixed; inset:0; z-index:200; pointer-events:none;
       background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 4px);
     }
-
-    #bg {
-      position:fixed; inset:0; width:100%; height:100%; z-index:0;
-      display:block;
-    }
-
-    /* grid overlay */
+    #bg { position:fixed; inset:0; width:100%; height:100%; z-index:0; display:block; }
     #grid-overlay {
       position:fixed; inset:0; z-index:1; pointer-events:none;
       background-image:
@@ -63,753 +53,583 @@
       background-size: 72px 72px;
     }
 
-    #root {
-      position:relative; z-index:10;
-      min-height:100vh;
+    /* ── REGION SELECTOR SCREEN ──────────────────────── */
+    #selector-screen {
+      position:fixed; inset:0; z-index:100;
       display:flex; flex-direction:column;
-      padding: 1.6rem 2rem 2.5rem;
-      gap: 1.1rem;
-      pointer-events:none;
+      align-items:center; justify-content:center;
+      gap:2.5rem;
+      padding:2rem;
     }
-
-    /* ── Header ─────────────────────────────────────── */
-    .header { text-align:center; flex-shrink:0; }
-
-    .badge {
+    .sel-header { text-align:center; }
+    .sel-eyebrow {
       display:inline-flex; align-items:center; gap:0.45rem;
       font-family:'JetBrains Mono',monospace;
-      font-size:0.58rem; letter-spacing:0.3em;
-      color:var(--green);
+      font-size:0.58rem; letter-spacing:0.3em; color:var(--green);
       border:1px solid rgba(0,255,136,0.22);
-      padding:0.22rem 0.85rem; border-radius:100px;
-      background:rgba(0,255,136,0.06);
-      margin-bottom:0.55rem;
+      padding:0.22rem 0.9rem; border-radius:100px;
+      background:rgba(0,255,136,0.06); margin-bottom:1rem;
     }
-    .badge-dot {
+    .sel-eyebrow-dot {
       width:5px; height:5px; border-radius:50%;
       background:var(--green); box-shadow:0 0 7px var(--green);
       animation:breathe 2.2s ease-in-out infinite;
     }
-    @keyframes breathe { 0%,100%{opacity:1} 50%{opacity:0.25} }
+    .sel-title {
+      font-family:'JetBrains Mono',monospace;
+      font-size:clamp(1.8rem,4vw,3.2rem);
+      font-weight:700; letter-spacing:-0.02em; line-height:1;
+      background:linear-gradient(128deg,#fff 20%,var(--green) 100%);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text; filter:drop-shadow(0 0 42px rgba(0,255,136,0.25));
+    }
+    .sel-sub {
+      font-size:0.72rem; letter-spacing:0.3em; color:var(--muted);
+      text-transform:uppercase; margin-top:0.5rem;
+    }
 
+    .regions-grid {
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:1.2rem;
+      width:100%; max-width:1100px;
+    }
+    @media(max-width:860px){ .regions-grid{ grid-template-columns:repeat(2,1fr); } }
+    @media(max-width:480px){ .regions-grid{ grid-template-columns:1fr; } }
+
+    .region-card {
+      position:relative; overflow:hidden;
+      background:rgba(3,7,18,0.82);
+      backdrop-filter:blur(28px); -webkit-backdrop-filter:blur(28px);
+      border:1px solid var(--border); border-radius:22px;
+      padding:2rem 1.5rem 1.6rem;
+      display:flex; flex-direction:column; gap:1rem;
+      cursor:pointer;
+      transition:transform 0.22s cubic-bezier(0.34,1.56,0.64,1),
+                  box-shadow 0.22s ease, border-color 0.22s;
+      pointer-events:all;
+    }
+    .region-card::before {
+      content:''; position:absolute; top:0; left:0; right:0; height:3px;
+      background:var(--rc-color,var(--green));
+      opacity:0; transition:opacity 0.22s;
+      border-radius:22px 22px 0 0;
+    }
+    .region-card:hover { transform:translateY(-6px) scale(1.02); }
+    .region-card:hover::before { opacity:1; }
+    .region-card:hover { border-color:var(--rc-color,var(--green)); box-shadow:0 0 40px -8px var(--rc-color,var(--green)); }
+
+    .rc-flag { font-size:3.2rem; line-height:1; }
+    .rc-name {
+      font-family:'JetBrains Mono',monospace;
+      font-size:1.25rem; font-weight:700; color:#fff;
+      letter-spacing:0.04em;
+    }
+    .rc-desc { font-size:0.68rem; color:var(--muted); line-height:1.55; }
+    .rc-stats { display:flex; flex-direction:column; gap:0.4rem; margin-top:0.2rem; }
+    .rc-stat {
+      display:flex; justify-content:space-between; align-items:center;
+      font-family:'JetBrains Mono',monospace; font-size:0.6rem;
+      padding:0.32rem 0.6rem; border-radius:8px;
+      background:rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.06);
+    }
+    .rc-stat-key { color:var(--muted); }
+    .rc-stat-val { color:#fff; font-weight:600; }
+    .rc-btn {
+      width:100%; padding:0.72rem;
+      background:transparent;
+      border:1px solid var(--rc-color,var(--green));
+      border-radius:12px;
+      color:var(--rc-color,var(--green));
+      font-family:'JetBrains Mono',monospace;
+      font-size:0.65rem; font-weight:700; letter-spacing:0.2em;
+      cursor:pointer; transition:background 0.18s, box-shadow 0.18s;
+      margin-top:auto;
+    }
+    .region-card:hover .rc-btn {
+      background:rgba(255,255,255,0.06);
+      box-shadow:0 0 20px -4px var(--rc-color,var(--green));
+    }
+
+    /* ── MAIN APP ──────────────────────────────────────── */
+    #app-screen {
+      position:relative; z-index:10;
+      min-height:100vh;
+      display:flex; flex-direction:column;
+      padding:1.6rem 2rem 2.5rem; gap:1.1rem;
+      pointer-events:none;
+      opacity:0; transform:translateY(24px);
+    }
+
+    /* ── Header ─────────────────────────────────────── */
+    .header { text-align:center; flex-shrink:0; }
+    .badge {
+      display:inline-flex; align-items:center; gap:0.45rem;
+      font-family:'JetBrains Mono',monospace;
+      font-size:0.58rem; letter-spacing:0.3em; color:var(--accent);
+      border:1px solid rgba(0,255,136,0.22);
+      padding:0.22rem 0.85rem; border-radius:100px;
+      background:rgba(0,255,136,0.06); margin-bottom:0.55rem;
+    }
+    .badge-dot {
+      width:5px; height:5px; border-radius:50%;
+      background:var(--accent); box-shadow:0 0 7px var(--accent);
+      animation:breathe 2.2s ease-in-out infinite;
+    }
+    @keyframes breathe { 0%,100%{opacity:1} 50%{opacity:0.25} }
     h1 {
       font-family:'JetBrains Mono',monospace;
       font-size:clamp(1.5rem,3.2vw,2.6rem);
       font-weight:600; line-height:1; letter-spacing:-0.02em;
-      background: linear-gradient(128deg, #ffffff 25%, var(--green) 100%);
+      background:linear-gradient(128deg,#fff 25%,var(--accent) 100%);
       -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-      background-clip:text;
-      filter:drop-shadow(0 0 42px rgba(0,255,136,0.28));
+      background-clip:text; filter:drop-shadow(0 0 42px rgba(0,255,136,0.28));
     }
-    .subtitle {
-      font-size:0.62rem; letter-spacing:0.38em;
-      color:var(--muted); text-transform:uppercase; margin-top:0.28rem;
-    }
+    .subtitle { font-size:0.62rem; letter-spacing:0.38em; color:var(--muted); text-transform:uppercase; margin-top:0.28rem; }
     .header-tags {
-      display:flex; align-items:center; justify-content:center;
+      display:flex; align-items:center; justify-content:center; flex-wrap:wrap;
       gap:0.55rem; margin-top:0.5rem;
       font-size:0.6rem; color:var(--muted);
       font-family:'JetBrains Mono',monospace; letter-spacing:0.07em;
     }
     .tag-sep { color:rgba(0,255,136,0.35); }
 
+    /* Region switcher pill in header */
+    .region-pill {
+      display:inline-flex; align-items:center; gap:0.5rem;
+      font-family:'JetBrains Mono',monospace;
+      font-size:0.62rem; font-weight:600; letter-spacing:0.12em;
+      padding:0.28rem 0.9rem; border-radius:100px;
+      border:1px solid var(--rc-color,var(--green));
+      color:var(--rc-color,var(--green));
+      background:rgba(0,255,136,0.07);
+      cursor:pointer; pointer-events:all;
+      transition:box-shadow 0.18s, background 0.18s;
+      margin-top:0.55rem;
+    }
+    .region-pill:hover { box-shadow:0 0 18px -4px var(--rc-color,var(--green)); background:rgba(255,255,255,0.07); }
+    .region-pill-flag { font-size:1rem; line-height:1; }
+
     /* ── Layout ──────────────────────────────────────── */
     .panels {
-      display:flex; gap:1.2rem;
-      flex-wrap:wrap;
+      display:flex; gap:1.2rem; flex-wrap:wrap;
       justify-content:center; align-items:stretch;
       pointer-events:all;
     }
-
     .glass {
       position:relative; overflow:hidden;
       background:var(--glass);
       backdrop-filter:blur(30px); -webkit-backdrop-filter:blur(30px);
-      border:1px solid var(--border);
-      border-radius:18px; padding:1.2rem;
+      border:1px solid var(--border); border-radius:18px; padding:1.2rem;
       display:flex; flex-direction:column; gap:0.9rem;
-      box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.045),
-        0 24px 64px rgba(0,0,0,0.65),
-        0 0 100px rgba(0,255,136,0.02);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,0.045),0 24px 64px rgba(0,0,0,0.65);
     }
     .glass::after {
       content:''; position:absolute; top:0; left:8%; right:8%; height:1px;
-      background:linear-gradient(90deg, transparent, rgba(0,255,136,0.25), transparent);
+      background:linear-gradient(90deg,transparent,var(--rc-color,rgba(0,255,136,0.25)),transparent);
       pointer-events:none;
     }
-
     .control-panel { width:292px; flex-shrink:0; }
     .result-panel  { width:350px; flex-shrink:0; }
     .chart-panel   { width:400px; flex-shrink:0; }
 
-    /* ── Card header ─────────────────────────────────── */
     .card-head {
       display:flex; align-items:center; justify-content:space-between;
       padding-bottom:0.8rem; border-bottom:1px solid var(--border);
     }
-    .card-tag {
-      font-family:'JetBrains Mono',monospace;
-      font-size:0.57rem; letter-spacing:0.25em;
-      color:var(--muted); text-transform:uppercase;
-    }
+    .card-tag { font-family:'JetBrains Mono',monospace; font-size:0.57rem; letter-spacing:0.25em; color:var(--muted); text-transform:uppercase; }
     .sdot { width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.13); }
-    .sdot.live {
-      background:var(--green); box-shadow:0 0 8px var(--green);
-      animation:breathe 2.2s ease-in-out infinite;
-    }
+    .sdot.live { background:var(--accent); box-shadow:0 0 8px var(--accent); animation:breathe 2.2s ease-in-out infinite; }
 
-    /* ── Sliders ─────────────────────────────────────── */
+    /* ── Sliders ──────────────────────────────────── */
     .slider-list { display:flex; flex-direction:column; gap:0.8rem; }
     .s-row { display:flex; flex-direction:column; gap:0.32rem; }
     .s-head { display:flex; justify-content:space-between; align-items:baseline; }
-    .s-label {
-      font-size:0.62rem; font-weight:500; letter-spacing:0.08em;
-      color:var(--muted); text-transform:uppercase;
-    }
-    .s-val {
-      font-family:'JetBrains Mono',monospace;
-      font-size:0.7rem; font-weight:500; color:var(--green);
-    }
-    .s-track {
-      position:relative; height:3px;
-      background:rgba(255,255,255,0.07); border-radius:100px;
-    }
-    .s-fill {
-      position:absolute; inset:0; right:auto;
-      background:linear-gradient(90deg, var(--green), var(--blue));
-      border-radius:100px; pointer-events:none;
-    }
-    input[type=range] {
-      position:absolute; top:50%; transform:translateY(-50%);
-      left:-2px; width:calc(100% + 4px);
-      appearance:none; -webkit-appearance:none;
-      background:transparent; cursor:pointer; height:18px;
-    }
-    input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance:none;
-      width:13px; height:13px; border-radius:50%;
-      background:#fff; border:2px solid var(--green);
-      box-shadow:0 0 10px rgba(0,255,136,0.55);
-      transition:box-shadow .18s, transform .18s;
-    }
-    input[type=range]:hover::-webkit-slider-thumb {
-      box-shadow:0 0 20px rgba(0,255,136,0.9); transform:scale(1.18);
-    }
-    input[type=range]::-moz-range-thumb {
-      width:13px; height:13px; border-radius:50%;
-      background:#fff; border:2px solid var(--green);
-      box-shadow:0 0 10px rgba(0,255,136,0.55);
-    }
+    .s-label { font-size:0.62rem; font-weight:500; letter-spacing:0.08em; color:var(--muted); text-transform:uppercase; }
+    .s-val { font-family:'JetBrains Mono',monospace; font-size:0.7rem; font-weight:500; color:var(--accent); }
+    .s-track { position:relative; height:3px; background:rgba(255,255,255,0.07); border-radius:100px; }
+    .s-fill { position:absolute; inset:0; right:auto; background:linear-gradient(90deg,var(--accent),var(--blue)); border-radius:100px; pointer-events:none; }
+    input[type=range] { position:absolute; top:50%; transform:translateY(-50%); left:-2px; width:calc(100% + 4px); appearance:none; -webkit-appearance:none; background:transparent; cursor:pointer; height:18px; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:13px; height:13px; border-radius:50%; background:#fff; border:2px solid var(--accent); box-shadow:0 0 10px rgba(0,255,136,0.55); transition:box-shadow .18s,transform .18s; }
+    input[type=range]:hover::-webkit-slider-thumb { box-shadow:0 0 20px rgba(0,255,136,0.9); transform:scale(1.18); }
+    input[type=range]::-moz-range-thumb { width:13px; height:13px; border-radius:50%; background:#fff; border:2px solid var(--accent); box-shadow:0 0 10px rgba(0,255,136,0.55); }
 
     /* ── Run button ──────────────────────────────────── */
     .run-btn {
       width:100%; padding:0.78rem;
-      background:linear-gradient(135deg, rgba(0,255,136,0.11), rgba(0,212,255,0.11));
+      background:linear-gradient(135deg,rgba(0,255,136,0.11),rgba(0,212,255,0.11));
       border:1px solid rgba(0,255,136,0.26); border-radius:12px;
-      color:var(--green);
+      color:var(--accent);
       font-family:'JetBrains Mono',monospace;
       font-size:0.7rem; font-weight:600; letter-spacing:0.18em;
-      cursor:pointer; transition:box-shadow .2s, background .2s;
+      cursor:pointer; transition:box-shadow .2s,background .2s;
       display:flex; align-items:center; justify-content:center; gap:0.45rem;
-      position:relative; overflow:hidden;
     }
     .run-btn:hover:not(:disabled) { box-shadow:0 0 36px rgba(0,255,136,0.22); }
     .run-btn:disabled { opacity:0.6; cursor:not-allowed; }
-    .spin {
-      width:11px; height:11px;
-      border:2px solid rgba(0,255,136,0.2); border-top-color:var(--green);
-      border-radius:50%; animation:rotate .7s linear infinite;
-    }
+    .spin { width:11px; height:11px; border:2px solid rgba(0,255,136,0.2); border-top-color:var(--accent); border-radius:50%; animation:rotate .7s linear infinite; }
     @keyframes rotate { to { transform:rotate(360deg); } }
 
     /* ── Result cards ────────────────────────────────── */
     .opt-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.7rem; }
-
-    .opt-card {
-      padding:0.85rem 0.9rem; border-radius:12px;
-      border:1px solid rgba(255,255,255,0.05);
-      background:rgba(255,255,255,0.02);
-      display:flex; flex-direction:column; gap:0.35rem;
-    }
-    .opt-type {
-      font-family:'JetBrains Mono',monospace;
-      font-size:0.54rem; letter-spacing:0.22em; color:var(--muted);
-    }
-    .opt-price {
-      font-family:'JetBrains Mono',monospace;
-      font-size:1.6rem; font-weight:600; line-height:1;
-    }
-    .opt-price.call { color:var(--green); text-shadow:0 0 28px rgba(0,255,136,0.38); }
+    .opt-card { padding:0.85rem 0.9rem; border-radius:12px; border:1px solid rgba(255,255,255,0.05); background:rgba(255,255,255,0.02); display:flex; flex-direction:column; gap:0.35rem; }
+    .opt-type { font-family:'JetBrains Mono',monospace; font-size:0.54rem; letter-spacing:0.22em; color:var(--muted); }
+    .opt-price { font-family:'JetBrains Mono',monospace; font-size:1.6rem; font-weight:600; line-height:1; }
+    .opt-price.call { color:var(--accent); text-shadow:0 0 28px rgba(0,255,136,0.38); }
     .opt-price.put  { color:var(--orange); text-shadow:0 0 28px rgba(249,115,22,0.38); }
-    .opt-se, .opt-ci {
-      font-family:'JetBrains Mono',monospace;
-      font-size:0.58rem; color:var(--muted); line-height:1.4;
-    }
+    .opt-se, .opt-ci { font-family:'JetBrains Mono',monospace; font-size:0.58rem; color:var(--muted); line-height:1.4; }
     .opt-bar { height:2px; border-radius:100px; background:rgba(255,255,255,0.05); margin-top:0.3rem; overflow:hidden; }
-    .opt-bar-fill {
-      height:100%; border-radius:100px;
-      transition:width 1.1s cubic-bezier(0.25,0.46,0.45,0.94);
-    }
-    .opt-bar-fill.call { background:linear-gradient(90deg, var(--green), rgba(0,255,136,0.15)); }
-    .opt-bar-fill.put  { background:linear-gradient(90deg, var(--orange), rgba(249,115,22,0.15)); }
+    .opt-bar-fill { height:100%; border-radius:100px; transition:width 1.1s cubic-bezier(0.25,0.46,0.45,0.94); }
+    .opt-bar-fill.call { background:linear-gradient(90deg,var(--accent),rgba(0,255,136,0.15)); }
+    .opt-bar-fill.put  { background:linear-gradient(90deg,var(--orange),rgba(249,115,22,0.15)); }
 
-    /* ── Parity ──────────────────────────────────────── */
-    .parity {
-      padding:0.85rem 0.9rem; border-radius:12px;
-      border:1px solid rgba(255,255,255,0.05);
-      background:rgba(255,255,255,0.02);
-    }
-    .parity-title {
-      font-family:'JetBrains Mono',monospace;
-      font-size:0.54rem; letter-spacing:0.22em; color:var(--muted); margin-bottom:0.55rem;
-    }
-    .p-row {
-      display:flex; justify-content:space-between; align-items:center;
-      padding:0.22rem 0; font-size:0.68rem;
-    }
+    .parity { padding:0.85rem 0.9rem; border-radius:12px; border:1px solid rgba(255,255,255,0.05); background:rgba(255,255,255,0.02); }
+    .parity-title { font-family:'JetBrains Mono',monospace; font-size:0.54rem; letter-spacing:0.22em; color:var(--muted); margin-bottom:0.55rem; }
+    .p-row { display:flex; justify-content:space-between; align-items:center; padding:0.22rem 0; font-size:0.68rem; }
     .p-key { font-family:'JetBrains Mono',monospace; color:var(--muted); }
     .p-val { font-family:'JetBrains Mono',monospace; color:var(--text); }
     .p-row.err { border-top:1px solid var(--border); margin-top:0.3rem; padding-top:0.52rem; }
-    .p-val.ok   { color:var(--green); }
+    .p-val.ok   { color:var(--accent); }
     .p-val.warn { color:var(--orange); }
-
-    /* ── Sim info ────────────────────────────────────── */
-    .sim-info {
-      display:flex; align-items:center; justify-content:center; gap:0.4rem;
-      font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:var(--muted);
-    }
+    .sim-info { display:flex; align-items:center; justify-content:center; gap:0.4rem; font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:var(--muted); }
     .sim-n { color:var(--blue); }
 
-    /* ── Empty ───────────────────────────────────────── */
     .empty { flex:1; display:flex; align-items:center; justify-content:center; }
     .dots  { display:flex; gap:0.32rem; }
-    .dots span {
-      width:5px; height:5px; border-radius:50%; background:var(--green);
-      animation:pop 1.4s ease-in-out infinite;
-    }
+    .dots span { width:5px; height:5px; border-radius:50%; background:var(--accent); animation:pop 1.4s ease-in-out infinite; }
     .dots span:nth-child(2) { animation-delay:.2s; }
     .dots span:nth-child(3) { animation-delay:.4s; }
     @keyframes pop { 0%,60%,100%{transform:translateY(0);opacity:.3} 30%{transform:translateY(-6px);opacity:1} }
 
     /* ── Chart Panel ─────────────────────────────────── */
     .chart-tabs { display:flex; gap:0.4rem; }
-    .chart-tab {
-      flex:1; padding:0.3rem 0.4rem;
-      background:transparent;
-      border:1px solid var(--border);
-      border-radius:8px;
-      color:var(--muted);
-      font-family:'JetBrains Mono',monospace;
-      font-size:0.5rem; letter-spacing:0.16em;
-      cursor:pointer; transition:all 0.2s;
-      text-transform:uppercase;
-    }
+    .chart-tab { flex:1; padding:0.3rem 0.4rem; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--muted); font-family:'JetBrains Mono',monospace; font-size:0.5rem; letter-spacing:0.16em; cursor:pointer; transition:all 0.2s; text-transform:uppercase; }
     .chart-tab:hover { border-color:rgba(0,255,136,0.2); color:var(--text); }
-    .chart-tab.active {
-      background:rgba(0,255,136,0.08);
-      border-color:rgba(0,255,136,0.3);
-      color:var(--green);
-    }
-    .chart-layers {
-      position:relative; flex:1; min-height:240px;
-    }
-    .chart-layer {
-      position:absolute; inset:0;
-      opacity:0; transition:opacity 0.28s;
-      pointer-events:none;
-    }
+    .chart-tab.active { background:rgba(0,255,136,0.08); border-color:rgba(0,255,136,0.3); color:var(--accent); }
+    .chart-layers { position:relative; flex:1; min-height:240px; }
+    .chart-layer { position:absolute; inset:0; opacity:0; transition:opacity 0.28s; pointer-events:none; }
     .chart-layer.active { opacity:1; pointer-events:all; }
-    .chart-caption {
-      font-family:'JetBrains Mono',monospace;
-      font-size:0.5rem; color:var(--muted);
-      text-align:center; letter-spacing:0.1em;
-    }
+    .chart-caption { font-family:'JetBrains Mono',monospace; font-size:0.5rem; color:var(--muted); text-align:center; letter-spacing:0.1em; }
 
-    /* ── Suggestions Section ─────────────────────────── */
-    .suggestions {
-      display:flex; gap:0.9rem; flex-wrap:wrap;
-      justify-content:center;
-      pointer-events:all;
-      padding:0 0 1rem;
-    }
-    .sug-card {
-      flex:1; min-width:185px; max-width:235px;
-      padding:1rem 1.1rem; border-radius:16px;
-      background:var(--glass);
-      backdrop-filter:blur(30px); -webkit-backdrop-filter:blur(30px);
-      border:1px solid var(--border);
-      display:flex; flex-direction:column; gap:0.6rem;
-      position:relative; overflow:hidden;
-      box-shadow:0 16px 48px rgba(0,0,0,0.55);
-    }
-    .sug-card::after {
-      content:''; position:absolute; top:0; left:8%; right:8%; height:1px;
-      background:linear-gradient(90deg, transparent, rgba(0,255,136,0.18), transparent);
-      pointer-events:none;
-    }
-    .sug-title {
-      font-family:'JetBrains Mono',monospace;
-      font-size:0.51rem; letter-spacing:0.28em; color:var(--muted);
-    }
-    .sug-badge {
-      display:inline-flex; align-items:center;
-      padding:0.28rem 0.75rem; border-radius:100px;
-      font-family:'JetBrains Mono',monospace;
-      font-size:0.68rem; font-weight:600; letter-spacing:0.07em;
-    }
+    /* ── Suggestions ─────────────────────────────────── */
+    .suggestions { display:flex; gap:0.9rem; flex-wrap:wrap; justify-content:center; pointer-events:all; padding:0 0 1rem; }
+    .sug-card { flex:1; min-width:185px; max-width:235px; padding:1rem 1.1rem; border-radius:16px; background:var(--glass); backdrop-filter:blur(30px); -webkit-backdrop-filter:blur(30px); border:1px solid var(--border); display:flex; flex-direction:column; gap:0.6rem; position:relative; overflow:hidden; box-shadow:0 16px 48px rgba(0,0,0,0.55); }
+    .sug-card::after { content:''; position:absolute; top:0; left:8%; right:8%; height:1px; background:linear-gradient(90deg,transparent,rgba(0,255,136,0.18),transparent); pointer-events:none; }
+    .sug-title { font-family:'JetBrains Mono',monospace; font-size:0.51rem; letter-spacing:0.28em; color:var(--muted); }
+    .sug-badge { display:inline-flex; align-items:center; padding:0.28rem 0.75rem; border-radius:100px; font-family:'JetBrains Mono',monospace; font-size:0.68rem; font-weight:600; letter-spacing:0.07em; }
     .sug-desc { font-size:0.61rem; color:var(--muted); line-height:1.55; }
-
-    /* moneyness gauge */
-    .money-gauge {
-      position:relative; height:4px;
-      background:linear-gradient(90deg, #f97316, rgba(168,85,247,0.8), #00ff88);
-      border-radius:100px; margin-top:0.1rem;
-    }
-    .money-needle {
-      position:absolute; top:-4px;
-      width:12px; height:12px; border-radius:50%;
-      background:#fff; border:2px solid var(--green);
-      transform:translateX(-50%);
-      box-shadow:0 0 10px rgba(0,255,136,0.65);
-      transition:left 0.6s cubic-bezier(0.34,1.56,0.64,1);
-    }
-    .money-labels {
-      display:flex; justify-content:space-between;
-      font-family:'JetBrains Mono',monospace;
-      font-size:0.48rem; color:var(--muted);
-    }
-
-    /* greek grid */
+    .money-gauge { position:relative; height:4px; background:linear-gradient(90deg,#f97316,rgba(168,85,247,0.8),#00ff88); border-radius:100px; margin-top:0.1rem; }
+    .money-needle { position:absolute; top:-4px; width:12px; height:12px; border-radius:50%; background:#fff; border:2px solid var(--accent); transform:translateX(-50%); box-shadow:0 0 10px rgba(0,255,136,0.65); transition:left 0.6s cubic-bezier(0.34,1.56,0.64,1); }
+    .money-labels { display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:0.48rem; color:var(--muted); }
     .greek-grid { display:flex; flex-direction:column; gap:0.38rem; }
     .greek-row  { display:flex; justify-content:space-between; align-items:center; }
     .greek-key  { font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:var(--muted); }
     .greek-val  { font-family:'JetBrains Mono',monospace; font-size:0.64rem; font-weight:500; }
-
-    /* breakeven */
     .be-block { display:flex; flex-direction:column; gap:0.12rem; }
     .be-label { font-family:'JetBrains Mono',monospace; font-size:0.5rem; letter-spacing:0.2em; }
     .be-price { font-family:'JetBrains Mono',monospace; font-size:1.25rem; font-weight:600; line-height:1; color:var(--text); }
     .be-pct   { font-family:'JetBrains Mono',monospace; font-size:0.57rem; }
     .be-divider { height:1px; background:var(--border); margin:0.15rem 0; }
-
-    /* strategy */
     .strat-name { font-family:'JetBrains Mono',monospace; font-size:0.8rem; font-weight:600; letter-spacing:0.04em; }
-    .strat-box  {
-      padding:0.6rem 0.65rem; border-radius:10px;
-      display:flex; gap:0.5rem; align-items:flex-start;
-    }
+    .strat-box  { padding:0.6rem 0.65rem; border-radius:10px; display:flex; gap:0.5rem; align-items:flex-start; }
     .strat-icon { font-size:0.75rem; flex-shrink:0; margin-top:0.05rem; }
     .strat-desc { font-size:0.59rem; color:var(--muted); line-height:1.5; }
-
-    /* risk */
     .risk-score { display:flex; align-items:baseline; gap:0.12rem; }
     .risk-num   { font-family:'JetBrains Mono',monospace; font-size:2.2rem; font-weight:700; line-height:1; }
     .risk-denom { font-family:'JetBrains Mono',monospace; font-size:0.75rem; color:var(--muted); }
-    .risk-lbl   {
-      display:inline-flex; align-items:center;
-      padding:0.2rem 0.6rem; border-radius:100px;
-      font-family:'JetBrains Mono',monospace;
-      font-size:0.56rem; font-weight:600; letter-spacing:0.15em;
-    }
+    .risk-lbl   { display:inline-flex; align-items:center; padding:0.2rem 0.6rem; border-radius:100px; font-family:'JetBrains Mono',monospace; font-size:0.56rem; font-weight:600; letter-spacing:0.15em; }
     .risk-bars { display:flex; gap:3px; margin-top:0.15rem; }
     .risk-seg   { flex:1; height:5px; border-radius:2px; transition:background 0.4s; }
-
-    /* section label */
-    .section-label {
-      text-align:center;
-      font-family:'JetBrains Mono',monospace;
-      font-size:0.55rem; letter-spacing:0.35em; color:var(--muted);
-      pointer-events:none;
-    }
+    .section-label { text-align:center; font-family:'JetBrains Mono',monospace; font-size:0.55rem; letter-spacing:0.35em; color:var(--muted); pointer-events:none; }
   </style>
 </head>
 <body>
   <canvas id="bg"></canvas>
   <div id="grid-overlay"></div>
-  <div id="root"></div>
+  <div id="selector-screen"></div>
+  <div id="app-screen"></div>
 
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
     /* ═══════════════════════════════════════════════════
-       MATH UTILITIES
+       REGION CONFIGS
+    ═══════════════════════════════════════════════════ */
+    const REGIONS = {
+      usa: {
+        id:'usa', flag:'🇺🇸', name:'USA',
+        fullName:'United States of America',
+        desc:'NYSE & NASDAQ listed equities, USD denominated options with SEC oversight.',
+        currency:'$', currencyName:'USD',
+        rate:0.053, vol:0.18, spot:100,
+        bank:'Federal Reserve',
+        index:'S&P 500 · NASDAQ · Dow Jones',
+        color:'#00ff88',
+        tags:['S&P 500','NASDAQ','NYSE','Fed Rate 5.3%'],
+        stats:[
+          ['Central Bank','Federal Reserve'],
+          ['Base Rate','5.30%'],
+          ['Currency','USD ($)'],
+          ['Key Index','S&P 500'],
+          ['Vol Regime','Low–Mid (15–25%)'],
+        ],
+      },
+      india: {
+        id:'india', flag:'🇮🇳', name:'India',
+        fullName:'Republic of India',
+        desc:'NSE & BSE listed equities, INR denominated options under SEBI regulations.',
+        currency:'₹', currencyName:'INR',
+        rate:0.065, vol:0.22, spot:100,
+        bank:'Reserve Bank of India',
+        index:'NIFTY 50 · SENSEX · Bank Nifty',
+        color:'#f97316',
+        tags:['NIFTY 50','SENSEX','NSE','RBI Rate 6.5%'],
+        stats:[
+          ['Central Bank','RBI'],
+          ['Base Rate','6.50%'],
+          ['Currency','INR (₹)'],
+          ['Key Index','NIFTY 50'],
+          ['Vol Regime','Mid–High (18–35%)'],
+        ],
+      },
+      europe: {
+        id:'europe', flag:'🇪🇺', name:'Europe',
+        fullName:'European Union Markets',
+        desc:'Euronext, XETRA & LSE equities, EUR denominated options under ESMA rules.',
+        currency:'€', currencyName:'EUR',
+        rate:0.040, vol:0.20, spot:100,
+        bank:'European Central Bank',
+        index:'EURO STOXX 50 · DAX · CAC 40',
+        color:'#00d4ff',
+        tags:['STOXX 50','DAX','CAC 40','ECB Rate 4.0%'],
+        stats:[
+          ['Central Bank','ECB'],
+          ['Base Rate','4.00%'],
+          ['Currency','EUR (€)'],
+          ['Key Index','EURO STOXX 50'],
+          ['Vol Regime','Low–Mid (14–22%)'],
+        ],
+      },
+      worldwide: {
+        id:'worldwide', flag:'🌍', name:'Worldwide',
+        fullName:'Global Multi-Market',
+        desc:'Cross-market pricing covering MSCI World, EM, Asia-Pacific and global indices.',
+        currency:'$', currencyName:'USD',
+        rate:0.050, vol:0.24, spot:100,
+        bank:'Global Composite',
+        index:'MSCI World · FTSE 100 · Nikkei 225',
+        color:'#a855f7',
+        tags:['MSCI World','FTSE 100','Nikkei','Global Composite'],
+        stats:[
+          ['Benchmark','IMF Base Rate'],
+          ['Base Rate','5.00%'],
+          ['Currency','USD ($)'],
+          ['Key Index','MSCI World'],
+          ['Vol Regime','Mid–High (20–35%)'],
+        ],
+      },
+    };
+
+    /* ═══════════════════════════════════════════════════
+       MATH
     ═══════════════════════════════════════════════════ */
     function randn() {
-      let u = 0, v = 0;
-      while (!u) u = Math.random();
-      while (!v) v = Math.random();
-      return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+      let u=0, v=0;
+      while(!u) u=Math.random();
+      while(!v) v=Math.random();
+      return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
     }
-
-    function mcPrice(S, K, r, sigma, T, N, type) {
-      const drift = (r - 0.5 * sigma * sigma) * T;
-      const diff  = sigma * Math.sqrt(T);
-      let sum = 0, sumSq = 0;
-      for (let i = 0; i < N; i++) {
-        const ST  = S * Math.exp(drift + diff * randn());
-        const pay = type === 'call' ? Math.max(ST - K, 0) : Math.max(K - ST, 0);
-        sum   += pay;
-        sumSq += pay * pay;
+    function mcPrice(S,K,r,sigma,T,N,type){
+      const drift=(r-0.5*sigma*sigma)*T, diff=sigma*Math.sqrt(T);
+      let sum=0, sumSq=0;
+      for(let i=0;i<N;i++){
+        const ST=S*Math.exp(drift+diff*randn());
+        const pay=type==='call'?Math.max(ST-K,0):Math.max(K-ST,0);
+        sum+=pay; sumSq+=pay*pay;
       }
-      const df = Math.exp(-r * T);
-      const mu = sum / N;
-      const v2 = Math.max(sumSq / N - mu * mu, 0);
-      const se = df * Math.sqrt(v2 / N);
-      const p  = df * mu;
-      return { price: p, se, ci: [p - 1.96 * se, p + 1.96 * se] };
+      const df=Math.exp(-r*T), mu=sum/N;
+      const v2=Math.max(sumSq/N-mu*mu,0);
+      const se=df*Math.sqrt(v2/N), p=df*mu;
+      return{price:p, se, ci:[p-1.96*se, p+1.96*se]};
     }
-
-    function gbmPath(S0, r, sigma, T, steps) {
-      const dt = T / steps;
-      let S = S0, arr = [S0];
-      for (let i = 0; i < steps; i++) {
-        S *= Math.exp((r - 0.5 * sigma * sigma) * dt + sigma * Math.sqrt(dt) * randn());
+    function gbmPath(S0,r,sigma,T,steps){
+      const dt=T/steps; let S=S0, arr=[S0];
+      for(let i=0;i<steps;i++){
+        S*=Math.exp((r-0.5*sigma*sigma)*dt+sigma*Math.sqrt(dt)*randn());
         arr.push(S);
       }
       return arr;
     }
-
-    function normalCDF(x) {
-      const a1=0.254829592, a2=-0.284496736, a3=1.421413741, a4=-1.453152027, a5=1.061405429, p=0.3275911;
-      const sign = x < 0 ? -1 : 1;
-      const t = 1 / (1 + p * Math.abs(x) / Math.SQRT2);
-      const y = 1 - (((((a5*t+a4)*t+a3)*t+a2)*t+a1)*t) * Math.exp(-x*x/2);
-      return 0.5 * (1 + sign * y);
+    function normalCDF(x){
+      const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
+      const sign=x<0?-1:1, t=1/(1+p*Math.abs(x)/Math.SQRT2);
+      const y=1-(((((a5*t+a4)*t+a3)*t+a2)*t+a1)*t)*Math.exp(-x*x/2);
+      return 0.5*(1+sign*y);
     }
-    function normalPDF(x) { return Math.exp(-0.5*x*x) / Math.sqrt(2*Math.PI); }
-
-    function bsGreeks(S, K, r, sigma, T) {
-      if (T <= 0 || sigma <= 0 || S <= 0 || K <= 0) return null;
-      const sq = Math.sqrt(T);
-      const d1 = (Math.log(S/K) + (r + 0.5*sigma*sigma)*T) / (sigma*sq);
-      const d2 = d1 - sigma*sq;
-      const Nd1 = normalCDF(d1), Nd2 = normalCDF(d2);
-      const phi = normalPDF(d1);
-      const df  = Math.exp(-r*T);
-      return {
-        callDelta: Nd1,
-        putDelta:  Nd1 - 1,
-        gamma:     phi / (S * sigma * sq),
-        vega:      S * phi * sq / 100,
-        callTheta: (-(S*phi*sigma)/(2*sq) - r*K*df*Nd2) / 365,
-        putTheta:  (-(S*phi*sigma)/(2*sq) + r*K*df*(1-Nd2)) / 365,
-      };
+    function normalPDF(x){return Math.exp(-0.5*x*x)/Math.sqrt(2*Math.PI);}
+    function bsGreeks(S,K,r,sigma,T){
+      if(T<=0||sigma<=0||S<=0||K<=0) return null;
+      const sq=Math.sqrt(T);
+      const d1=(Math.log(S/K)+(r+0.5*sigma*sigma)*T)/(sigma*sq);
+      const d2=d1-sigma*sq;
+      const Nd1=normalCDF(d1),Nd2=normalCDF(d2),phi=normalPDF(d1),df=Math.exp(-r*T);
+      return{callDelta:Nd1,putDelta:Nd1-1,gamma:phi/(S*sigma*sq),vega:S*phi*sq/100,callTheta:(-(S*phi*sigma)/(2*sq)-r*K*df*Nd2)/365,putTheta:(-(S*phi*sigma)/(2*sq)+r*K*df*(1-Nd2))/365};
     }
 
     /* ═══════════════════════════════════════════════════
-       CHART.JS PLUGIN & CREATORS
+       CHART.JS
     ═══════════════════════════════════════════════════ */
-    const vlinePlugin = {
-      id: 'vline',
-      afterDraw(chart) {
-        const vls = chart.options.plugins?.vline?.lines;
-        if (!vls || !vls.length) return;
-        const ctx = chart.ctx;
-        const xs  = chart.scales.x;
-        const ys  = chart.scales.y;
-        vls.forEach(l => {
-          const px = xs.getPixelForValue(l.value);
-          ctx.save();
-          ctx.strokeStyle = l.color || 'rgba(255,255,255,0.3)';
-          ctx.lineWidth   = l.width || 1;
-          ctx.setLineDash(l.dash || []);
-          ctx.beginPath();
-          ctx.moveTo(px, ys.top);
-          ctx.lineTo(px, ys.bottom);
-          ctx.stroke();
-          if (l.label) {
-            ctx.fillStyle = l.color || 'rgba(255,255,255,0.3)';
-            ctx.font = '8px JetBrains Mono';
-            ctx.fillText(l.label, px + 4, ys.top + 12);
-          }
-          ctx.restore();
-        });
-      }
-    };
+    const vlinePlugin={id:'vline',afterDraw(chart){
+      const vls=chart.options.plugins?.vline?.lines;
+      if(!vls||!vls.length) return;
+      const ctx=chart.ctx,xs=chart.scales.x,ys=chart.scales.y;
+      vls.forEach(l=>{
+        const px=xs.getPixelForValue(l.value);
+        ctx.save(); ctx.strokeStyle=l.color||'rgba(255,255,255,0.3)';
+        ctx.lineWidth=l.width||1; ctx.setLineDash(l.dash||[]);
+        ctx.beginPath(); ctx.moveTo(px,ys.top); ctx.lineTo(px,ys.bottom); ctx.stroke();
+        if(l.label){ctx.fillStyle=l.color||'rgba(255,255,255,0.3)';ctx.font='8px JetBrains Mono';ctx.fillText(l.label,px+4,ys.top+12);}
+        ctx.restore();
+      });
+    }};
     Chart.register(vlinePlugin);
+    const CHART_OPTS={responsive:true,maintainAspectRatio:false,animation:{duration:550,easing:'easeOutCubic'}};
+    const TICK_STYLE={color:'rgba(226,232,240,0.38)',font:{family:'JetBrains Mono',size:8}};
+    const GRID_STYLE={color:'rgba(255,255,255,0.04)'};
+    const TOOLTIP_STYLE={backgroundColor:'rgba(3,7,18,0.92)',borderColor:'rgba(255,255,255,0.08)',borderWidth:1,titleFont:{family:'JetBrains Mono',size:9},bodyFont:{family:'JetBrains Mono',size:9}};
 
-    const CHART_OPTS = {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 550, easing: 'easeOutCubic' },
-    };
-    const TICK_STYLE = { color:'rgba(226,232,240,0.38)', font:{ family:'JetBrains Mono', size:8 } };
-    const GRID_STYLE = { color:'rgba(255,255,255,0.04)' };
-    const TOOLTIP_STYLE = {
-      backgroundColor:'rgba(3,7,18,0.92)',
-      borderColor:'rgba(255,255,255,0.08)', borderWidth:1,
-      titleFont:{ family:'JetBrains Mono', size:9 },
-      bodyFont:{ family:'JetBrains Mono', size:9 },
-    };
-
-    function createPayoffChart(canvas, params, res) {
-      const { spot, strike } = params;
-      const { call, put } = res;
-      const N    = 120;
-      const minS = Math.max(1, strike * 0.3);
-      const maxS = strike * 2.2;
-      const step = (maxS - minS) / N;
-      const labels = [], callPnl = [], putPnl = [];
-      for (let i = 0; i <= N; i++) {
-        const s = minS + i * step;
-        labels.push(s.toFixed(0));
-        callPnl.push(+(Math.max(s - strike, 0) - call.price).toFixed(3));
-        putPnl.push(+(Math.max(strike - s, 0) - put.price).toFixed(3));
-      }
-      const strikeIdx = Math.round((strike - minS) / step);
-      const spotIdx   = Math.round((spot   - minS) / step);
-      return new Chart(canvas, {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [
-            { label:'Call P&L', data:callPnl, borderColor:'#00ff88', borderWidth:2, pointRadius:0, tension:0.1, fill:false },
-            { label:'Put P&L',  data:putPnl,  borderColor:'#f97316', borderWidth:2, pointRadius:0, tension:0.1, fill:false },
-            { label:'',         data:labels.map(()=>0), borderColor:'rgba(255,255,255,0.12)', borderWidth:1, borderDash:[2,4], pointRadius:0, fill:false },
-          ]
-        },
-        options: {
-          ...CHART_OPTS,
-          plugins: {
-            legend: { labels:{ color:'rgba(226,232,240,0.5)', font:{family:'JetBrains Mono',size:9}, filter:i=>i.text!=='', boxWidth:10 } },
-            tooltip: { ...TOOLTIP_STYLE, callbacks:{ title:c=>`S_T = $${c[0].label}`, label:c=>`${c.dataset.label}: $${c.raw.toFixed(2)}` } },
-            vline: { lines:[
-              { value:strikeIdx, color:'rgba(255,255,255,0.28)', dash:[4,4], label:`K=$${strike}` },
-              { value:spotIdx,   color:'rgba(0,212,255,0.45)',   dash:[4,4], label:`S=$${spot}` },
-            ]},
-          },
-          scales: {
-            x: { grid:GRID_STYLE, ticks:{ ...TICK_STYLE, maxTicksLimit:7, callback:(v,i,all)=> i%(Math.floor(all.length/6))||0?'':'$'+labels[i] } },
-            y: { grid:GRID_STYLE, ticks:{ ...TICK_STYLE, callback:v=>'$'+v.toFixed(1) } },
-          }
-        }
-      });
+    function createPayoffChart(canvas,params,res,cur){
+      const{spot,strike}=params,{call,put}=res;
+      const N=120,minS=Math.max(1,strike*0.3),maxS=strike*2.2,step=(maxS-minS)/N;
+      const labels=[],callPnl=[],putPnl=[];
+      for(let i=0;i<=N;i++){const s=minS+i*step;labels.push(s.toFixed(0));callPnl.push(+(Math.max(s-strike,0)-call.price).toFixed(3));putPnl.push(+(Math.max(strike-s,0)-put.price).toFixed(3));}
+      const strikeIdx=Math.round((strike-minS)/step), spotIdx=Math.round((spot-minS)/step);
+      return new Chart(canvas,{type:'line',data:{labels,datasets:[
+        {label:'Call P&L',data:callPnl,borderColor:'#00ff88',borderWidth:2,pointRadius:0,tension:0.1,fill:false},
+        {label:'Put P&L', data:putPnl, borderColor:'#f97316',borderWidth:2,pointRadius:0,tension:0.1,fill:false},
+        {label:'',        data:labels.map(()=>0),borderColor:'rgba(255,255,255,0.12)',borderWidth:1,borderDash:[2,4],pointRadius:0,fill:false},
+      ]},options:{...CHART_OPTS,plugins:{
+        legend:{labels:{color:'rgba(226,232,240,0.5)',font:{family:'JetBrains Mono',size:9},filter:i=>i.text!=='',boxWidth:10}},
+        tooltip:{...TOOLTIP_STYLE,callbacks:{title:c=>`S_T = ${cur}${c[0].label}`,label:c=>`${c.dataset.label}: ${cur}${c.raw.toFixed(2)}`}},
+        vline:{lines:[{value:strikeIdx,color:'rgba(255,255,255,0.28)',dash:[4,4],label:`K=${cur}${strike}`},{value:spotIdx,color:'rgba(0,212,255,0.45)',dash:[4,4],label:`S=${cur}${spot}`}]},
+      },scales:{x:{grid:GRID_STYLE,ticks:{...TICK_STYLE,maxTicksLimit:7,callback:(v,i,all)=>i%(Math.floor(all.length/6))||0?'':cur+labels[i]}},y:{grid:GRID_STYLE,ticks:{...TICK_STYLE,callback:v=>cur+v.toFixed(1)}}}}});
     }
-
-    function createDistChart(canvas, params) {
-      const { spot, strike, rate, vol, maturity } = params;
-      const N     = 6000;
-      const drift = (rate - 0.5*vol*vol)*maturity;
-      const diff  = vol*Math.sqrt(maturity);
-      const prices = [];
-      for (let i = 0; i < N; i++) prices.push(spot * Math.exp(drift + diff * randn()));
-
-      const lo = Math.max(spot*0.15, Math.min(...prices));
-      const hi = Math.min(spot*3.5,  Math.max(...prices));
-      const nBins = 44, bsize = (hi - lo) / nBins;
-      const bins = Array(nBins).fill(0);
-      const centers = Array.from({length:nBins}, (_,i)=>lo+(i+0.5)*bsize);
-      prices.forEach(p=>{ const idx=Math.min(nBins-1,Math.max(0,Math.floor((p-lo)/bsize))); bins[idx]++; });
-
-      const colors = centers.map(c => c>=strike ? 'rgba(0,255,136,0.6)' : 'rgba(249,115,22,0.6)');
-      const strikeIdx = Math.round((strike - lo) / bsize - 0.5);
-      const spotIdx   = Math.round((spot   - lo) / bsize - 0.5);
-
-      return new Chart(canvas, {
-        type: 'bar',
-        data: {
-          labels: centers.map(c=>c.toFixed(0)),
-          datasets: [{ label:'Frequency', data:bins, backgroundColor:colors, borderColor:colors.map(c=>c.replace('0.6','0.85')), borderWidth:0.5, barPercentage:1, categoryPercentage:1 }]
-        },
-        options: {
-          ...CHART_OPTS,
-          plugins: {
-            legend:{ display:false },
-            tooltip:{ ...TOOLTIP_STYLE, callbacks:{ title:c=>`S_T ≈ $${c[0].label}`, label:c=>`Count: ${c.raw}` } },
-            vline:{ lines:[
-              { value:strikeIdx, color:'rgba(255,255,255,0.38)', dash:[4,4], label:`K=$${strike}` },
-              { value:spotIdx,   color:'rgba(0,212,255,0.5)',    dash:[4,4], label:`S₀=$${spot}` },
-            ]},
-          },
-          scales: {
-            x: { grid:{display:false}, ticks:{ ...TICK_STYLE, maxTicksLimit:7, callback:(v,i)=> i%6===0 ? '$'+centers[i].toFixed(0) : '' } },
-            y: { grid:GRID_STYLE, ticks:TICK_STYLE },
-          }
-        }
-      });
+    function createDistChart(canvas,params,cur){
+      const{spot,strike,rate,vol,maturity}=params;
+      const N=6000,drift=(rate-0.5*vol*vol)*maturity,diff=vol*Math.sqrt(maturity);
+      const prices=[];
+      for(let i=0;i<N;i++) prices.push(spot*Math.exp(drift+diff*randn()));
+      const lo=Math.max(spot*0.15,Math.min(...prices)),hi=Math.min(spot*3.5,Math.max(...prices));
+      const nBins=44,bsize=(hi-lo)/nBins,bins=Array(nBins).fill(0);
+      const centers=Array.from({length:nBins},(_,i)=>lo+(i+0.5)*bsize);
+      prices.forEach(p=>{const idx=Math.min(nBins-1,Math.max(0,Math.floor((p-lo)/bsize)));bins[idx]++;});
+      const colors=centers.map(c=>c>=strike?'rgba(0,255,136,0.6)':'rgba(249,115,22,0.6)');
+      const strikeIdx=Math.round((strike-lo)/bsize-0.5),spotIdx=Math.round((spot-lo)/bsize-0.5);
+      return new Chart(canvas,{type:'bar',data:{labels:centers.map(c=>c.toFixed(0)),datasets:[{label:'Frequency',data:bins,backgroundColor:colors,borderColor:colors.map(c=>c.replace('0.6','0.85')),borderWidth:0.5,barPercentage:1,categoryPercentage:1}]},
+        options:{...CHART_OPTS,plugins:{legend:{display:false},tooltip:{...TOOLTIP_STYLE,callbacks:{title:c=>`S_T ≈ ${cur}${c[0].label}`,label:c=>`Count: ${c.raw}`}},vline:{lines:[{value:strikeIdx,color:'rgba(255,255,255,0.38)',dash:[4,4],label:`K=${cur}${strike}`},{value:spotIdx,color:'rgba(0,212,255,0.5)',dash:[4,4],label:`S₀=${cur}${spot}`}]}},
+        scales:{x:{grid:{display:false},ticks:{...TICK_STYLE,maxTicksLimit:7,callback:(v,i)=>i%6===0?cur+centers[i].toFixed(0):''}},y:{grid:GRID_STYLE,ticks:TICK_STYLE}}}});
     }
-
-    function createPathsChart(canvas, params) {
-      const { spot, strike, rate, vol, maturity } = params;
-      const N_PATHS = 22, STEPS = 80;
-      const PALETTE = ['#00ff88','#00d4ff','#a855f7','#f97316','#ec4899','#3b82f6','#fbbf24','#10b981','#8b5cf6','#ef4444','#06b6d4','#84cc16','#f43f5e','#14b8a6','#6366f1','#00ff88','#00d4ff','#a855f7','#f97316','#ec4899','#3b82f6','#10b981'];
-      const labels   = Array.from({length:STEPS+1},(_,i)=>(i*maturity/STEPS).toFixed(2));
-      const datasets = Array.from({length:N_PATHS},(_,i)=>({
-        label:'', data:gbmPath(spot,rate,vol,maturity,STEPS),
-        borderColor:PALETTE[i]+'88', borderWidth:1.2, pointRadius:0, tension:0.18, fill:false,
-      }));
-      datasets.push({ label:`Strike K=$${strike}`, data:Array(STEPS+1).fill(strike), borderColor:'rgba(255,255,255,0.28)', borderWidth:1, borderDash:[4,4], pointRadius:0, fill:false });
-
-      return new Chart(canvas, {
-        type:'line',
-        data:{ labels, datasets },
-        options:{
-          ...CHART_OPTS,
-          plugins:{
-            legend:{ labels:{ filter:i=>i.text.startsWith('Strike'), color:'rgba(226,232,240,0.45)', font:{family:'JetBrains Mono',size:9}, boxWidth:10 } },
-            tooltip:{ enabled:false },
-            vline:{ lines:[] },
-          },
-          scales:{
-            x:{ grid:GRID_STYLE, ticks:{ ...TICK_STYLE, maxTicksLimit:6, callback:(_,i)=>parseFloat(labels[i]).toFixed(1)+'y' } },
-            y:{ grid:GRID_STYLE, ticks:{ ...TICK_STYLE, callback:v=>'$'+v.toFixed(0) } },
-          }
-        }
-      });
+    function createPathsChart(canvas,params,cur){
+      const{spot,strike,rate,vol,maturity}=params;
+      const N_PATHS=22,STEPS=80;
+      const PALETTE=['#00ff88','#00d4ff','#a855f7','#f97316','#ec4899','#3b82f6','#fbbf24','#10b981','#8b5cf6','#ef4444','#06b6d4','#84cc16','#f43f5e','#14b8a6','#6366f1','#00ff88','#00d4ff','#a855f7','#f97316','#ec4899','#3b82f6','#10b981'];
+      const labels=Array.from({length:STEPS+1},(_,i)=>(i*maturity/STEPS).toFixed(2));
+      const datasets=Array.from({length:N_PATHS},(_,i)=>({label:'',data:gbmPath(spot,rate,vol,maturity,STEPS),borderColor:PALETTE[i]+'88',borderWidth:1.2,pointRadius:0,tension:0.18,fill:false}));
+      datasets.push({label:`Strike K=${cur}${strike}`,data:Array(STEPS+1).fill(strike),borderColor:'rgba(255,255,255,0.28)',borderWidth:1,borderDash:[4,4],pointRadius:0,fill:false});
+      return new Chart(canvas,{type:'line',data:{labels,datasets},options:{...CHART_OPTS,plugins:{legend:{labels:{filter:i=>i.text.startsWith('Strike'),color:'rgba(226,232,240,0.45)',font:{family:'JetBrains Mono',size:9},boxWidth:10}},tooltip:{enabled:false},vline:{lines:[]}},
+        scales:{x:{grid:GRID_STYLE,ticks:{...TICK_STYLE,maxTicksLimit:6,callback:(_,i)=>parseFloat(labels[i]).toFixed(1)+'y'}},y:{grid:GRID_STYLE,ticks:{...TICK_STYLE,callback:v=>cur+v.toFixed(0)}}}}});
     }
 
     /* ═══════════════════════════════════════════════════
-       THREE.JS SCENE
+       THREE.JS
     ═══════════════════════════════════════════════════ */
     class Scene3D {
-      constructor(canvas) {
-        this.canvas = canvas;
-        this.t = 0;
-        this.raf = null;
-        this.pathMeshes = [];
-        this._orbPh = [];
-
-        this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-        this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-        this.renderer.setSize(innerWidth, innerHeight);
+      constructor(canvas){
+        this.t=0; this.raf=null; this.pathMeshes=[]; this._orbPh=[];
+        this.renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+        this.renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+        this.renderer.setSize(innerWidth,innerHeight);
         this.renderer.setClearColor(0x030712);
-
-        this.scene  = new THREE.Scene();
-        this.scene.fog = new THREE.FogExp2(0x030712, 0.016);
-        this.camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 1000);
-        this.camera.position.set(0, 0, 32);
-
-        this._buildStars();
-        this._buildWireframes();
-        this._buildOrbs();
-        this.buildPaths(0.05, 0.2, 1.0);
-
-        this._onResize = () => {
-          this.renderer.setSize(innerWidth, innerHeight);
-          this.camera.aspect = innerWidth / innerHeight;
-          this.camera.updateProjectionMatrix();
-        };
-        window.addEventListener('resize', this._onResize);
-        this._tick();
+        this.scene=new THREE.Scene();
+        this.scene.fog=new THREE.FogExp2(0x030712,0.016);
+        this.camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,1000);
+        this.camera.position.set(0,0,32);
+        this._buildStars(); this._buildWireframes(); this._buildOrbs();
+        this.buildPaths(0.05,0.2,1.0);
+        this._onResize=()=>{this.renderer.setSize(innerWidth,innerHeight);this.camera.aspect=innerWidth/innerHeight;this.camera.updateProjectionMatrix();};
+        window.addEventListener('resize',this._onResize); this._tick();
       }
-
-      _buildStars() {
-        const n = 4000;
-        const pos = new Float32Array(n * 3);
-        for (let i = 0; i < n * 3; i++) pos[i] = (Math.random() - 0.5) * 280;
-        const g = new THREE.BufferGeometry();
-        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-        this.stars = new THREE.Points(g, new THREE.PointsMaterial({
-          size: 0.11, color: 0xffffff, transparent: true, opacity: 0.52
-        }));
+      _buildStars(){
+        const n=4000,pos=new Float32Array(n*3);
+        for(let i=0;i<n*3;i++) pos[i]=(Math.random()-0.5)*280;
+        const g=new THREE.BufferGeometry();
+        g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+        this.stars=new THREE.Points(g,new THREE.PointsMaterial({size:0.11,color:0xffffff,transparent:true,opacity:0.52}));
         this.scene.add(this.stars);
       }
-
-      _buildWireframes() {
-        const add = (r, detail, col, op) => {
-          const m = new THREE.Mesh(
-            new THREE.IcosahedronGeometry(r, detail),
-            new THREE.MeshBasicMaterial({ color: col, wireframe: true, transparent: true, opacity: op })
-          );
-          this.scene.add(m);
-          return m;
-        };
-        this.ico1 = add(10, 1, 0x00ff88, 0.055);
-        this.ico2 = add( 6, 1, 0x00d4ff, 0.095);
-        this.ico3 = add( 3, 1, 0xa855f7, 0.16);
-        this.ring = new THREE.Mesh(
-          new THREE.TorusGeometry(14, 0.06, 8, 120),
-          new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.12 })
-        );
-        this.ring.rotation.x = Math.PI / 2.8;
-        this.scene.add(this.ring);
+      _buildWireframes(){
+        const add=(r,d,col,op)=>{const m=new THREE.Mesh(new THREE.IcosahedronGeometry(r,d),new THREE.MeshBasicMaterial({color:col,wireframe:true,transparent:true,opacity:op}));this.scene.add(m);return m;};
+        this.ico1=add(10,1,0x00ff88,0.055); this.ico2=add(6,1,0x00d4ff,0.095); this.ico3=add(3,1,0xa855f7,0.16);
+        this.ring=new THREE.Mesh(new THREE.TorusGeometry(14,0.06,8,120),new THREE.MeshBasicMaterial({color:0x00ff88,transparent:true,opacity:0.12}));
+        this.ring.rotation.x=Math.PI/2.8; this.scene.add(this.ring);
       }
-
-      _buildOrbs() {
-        const cols = [0x00ff88, 0x00d4ff, 0xa855f7, 0xf97316, 0xec4899, 0x3b82f6, 0xfbbf24];
-        this.orbs = cols.map((c) => {
-          const m = new THREE.Mesh(
-            new THREE.SphereGeometry(0.3 + Math.random() * 0.5, 16, 16),
-            new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.45 })
-          );
-          m.position.set((Math.random()-0.5)*32, (Math.random()-0.5)*20, -8+(Math.random()-0.5)*10);
-          this._orbPh.push(Math.random() * Math.PI * 2);
-          this.scene.add(m);
-          return m;
-        });
+      _buildOrbs(){
+        const cols=[0x00ff88,0x00d4ff,0xa855f7,0xf97316,0xec4899,0x3b82f6,0xfbbf24];
+        this.orbs=cols.map(c=>{const m=new THREE.Mesh(new THREE.SphereGeometry(0.3+Math.random()*0.5,16,16),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.45}));
+          m.position.set((Math.random()-0.5)*32,(Math.random()-0.5)*20,-8+(Math.random()-0.5)*10);
+          this._orbPh.push(Math.random()*Math.PI*2); this.scene.add(m); return m;});
       }
-
-      buildPaths(r, sigma, T) {
-        this.pathMeshes.forEach(m => { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); });
-        this.pathMeshes = [];
-        const PALETTE = [0x00ff88,0x00d4ff,0xa855f7,0xf97316,0xec4899,0x3b82f6,0xfbbf24,0x10b981,0x8b5cf6,0xef4444,0x06b6d4,0x84cc16,0xf43f5e,0x14b8a6,0x6366f1,0x00ff88,0x00d4ff,0xa855f7,0xf97316,0xec4899,0x3b82f6,0x10b981];
-        const N=22, STEPS=64, XL=-14, XR=14;
-        for (let i=0; i<N; i++) {
-          const prices=gbmPath(100,r,sigma,T,STEPS);
-          const zOff=-22+(i/N)*44;
-          const minP=Math.min(...prices), maxP=Math.max(...prices), range=maxP-minP||1;
-          const pts=prices.map((p,j)=>new THREE.Vector3(XL+(j/STEPS)*(XR-XL),((p-minP)/range-0.5)*11,zOff));
+      buildPaths(r,sigma,T){
+        this.pathMeshes.forEach(m=>{this.scene.remove(m);m.geometry.dispose();m.material.dispose();}); this.pathMeshes=[];
+        const PAL=[0x00ff88,0x00d4ff,0xa855f7,0xf97316,0xec4899,0x3b82f6,0xfbbf24,0x10b981,0x8b5cf6,0xef4444,0x06b6d4,0x84cc16,0xf43f5e,0x14b8a6,0x6366f1,0x00ff88,0x00d4ff,0xa855f7,0xf97316,0xec4899,0x3b82f6,0x10b981];
+        for(let i=0;i<22;i++){
+          const prices=gbmPath(100,r,sigma,T,64),zOff=-22+(i/22)*44;
+          const minP=Math.min(...prices),maxP=Math.max(...prices),range=maxP-minP||1;
+          const pts=prices.map((p,j)=>new THREE.Vector3(-14+(j/64)*28,((p-minP)/range-0.5)*11,zOff));
           const curve=new THREE.CatmullRomCurve3(pts);
-          const geom=new THREE.TubeGeometry(curve,64,0.038,6,false);
-          const mat=new THREE.MeshBasicMaterial({ color:PALETTE[i%PALETTE.length], transparent:true, opacity:0.5+Math.random()*0.35 });
-          const mesh=new THREE.Mesh(geom,mat);
-          this.pathMeshes.push(mesh);
-          this.scene.add(mesh);
+          const mesh=new THREE.Mesh(new THREE.TubeGeometry(curve,64,0.038,6,false),new THREE.MeshBasicMaterial({color:PAL[i%PAL.length],transparent:true,opacity:0.5+Math.random()*0.35}));
+          this.pathMeshes.push(mesh); this.scene.add(mesh);
         }
       }
-
-      _tick() {
-        this.raf = requestAnimationFrame(() => this._tick());
-        this.t += 0.0038;
-        this.stars.rotation.y = this.t*0.012;
-        this.stars.rotation.x = this.t*0.006;
-        this.ico1.rotation.x =  this.t*0.22; this.ico1.rotation.y =  this.t*0.31;
-        this.ico2.rotation.x = -this.t*0.35; this.ico2.rotation.y =  this.t*0.26;
-        this.ico3.rotation.x =  this.t*0.48; this.ico3.rotation.z = -this.t*0.38;
-        this.ring.rotation.z =  this.t*0.18;
-        this.orbs.forEach((orb,i) => { orb.position.y += Math.sin(this.t*0.45+this._orbPh[i])*0.005; orb.rotation.x=this.t*0.3; });
-        this.pathMeshes.forEach((m,i) => { m.position.y=Math.sin(this.t*0.28+i*0.38)*0.35; });
-        this.camera.position.x = Math.sin(this.t*0.065)*4.5;
-        this.camera.position.y = Math.sin(this.t*0.048)*2.8;
-        this.camera.lookAt(0,0,0);
-        this.renderer.render(this.scene, this.camera);
+      _tick(){
+        this.raf=requestAnimationFrame(()=>this._tick()); this.t+=0.0038;
+        this.stars.rotation.y=this.t*0.012; this.stars.rotation.x=this.t*0.006;
+        this.ico1.rotation.x=this.t*0.22; this.ico1.rotation.y=this.t*0.31;
+        this.ico2.rotation.x=-this.t*0.35; this.ico2.rotation.y=this.t*0.26;
+        this.ico3.rotation.x=this.t*0.48; this.ico3.rotation.z=-this.t*0.38;
+        this.ring.rotation.z=this.t*0.18;
+        this.orbs.forEach((orb,i)=>{orb.position.y+=Math.sin(this.t*0.45+this._orbPh[i])*0.005;orb.rotation.x=this.t*0.3;});
+        this.pathMeshes.forEach((m,i)=>{m.position.y=Math.sin(this.t*0.28+i*0.38)*0.35;});
+        this.camera.position.x=Math.sin(this.t*0.065)*4.5; this.camera.position.y=Math.sin(this.t*0.048)*2.8;
+        this.camera.lookAt(0,0,0); this.renderer.render(this.scene,this.camera);
       }
-
-      destroy() { cancelAnimationFrame(this.raf); window.removeEventListener('resize',this._onResize); this.renderer.dispose(); }
+      destroy(){cancelAnimationFrame(this.raf);window.removeEventListener('resize',this._onResize);this.renderer.dispose();}
     }
 
     /* ═══════════════════════════════════════════════════
        ANIMATED NUMBER
     ═══════════════════════════════════════════════════ */
-    function AnimNum({ value, dec = 4, pre = '' }) {
-      const ref  = useRef(null);
-      const prev = useRef(value);
-      useEffect(() => {
-        const obj = { v: prev.current };
-        gsap.to(obj, { v:value, duration:1.0, ease:'power2.out',
-          onUpdate() { if (ref.current) ref.current.textContent = pre + obj.v.toFixed(dec); },
-          onComplete() { prev.current = value; },
-        });
-      }, [value, dec, pre]);
+    function AnimNum({value,dec=4,pre=''}){
+      const ref=useRef(null),prev=useRef(value);
+      useEffect(()=>{
+        const obj={v:prev.current};
+        gsap.to(obj,{v:value,duration:1.0,ease:'power2.out',
+          onUpdate(){if(ref.current) ref.current.textContent=pre+obj.v.toFixed(dec);},
+          onComplete(){prev.current=value;}});
+      },[value,dec,pre]);
       return <span ref={ref}>{pre}{value.toFixed(dec)}</span>;
     }
 
     /* ═══════════════════════════════════════════════════
        SLIDER
     ═══════════════════════════════════════════════════ */
-    function Slider({ label, value, min, max, step, fmt, onChange }) {
-      const pct = ((value - min) / (max - min)) * 100;
-      return (
+    function Slider({label,value,min,max,step,fmt,onChange}){
+      const pct=((value-min)/(max-min))*100;
+      return(
         <div className="s-row">
-          <div className="s-head">
-            <span className="s-label">{label}</span>
-            <span className="s-val">{fmt(value)}</span>
-          </div>
-          <div className="s-track">
-            <div className="s-fill" style={{ width:`${pct}%` }} />
-            <input type="range" min={min} max={max} step={step} value={value} onChange={e=>onChange(+e.target.value)} />
-          </div>
+          <div className="s-head"><span className="s-label">{label}</span><span className="s-val">{fmt(value)}</span></div>
+          <div className="s-track"><div className="s-fill" style={{width:`${pct}%`}}/><input type="range" min={min} max={max} step={step} value={value} onChange={e=>onChange(+e.target.value)}/></div>
         </div>
       );
     }
@@ -817,136 +637,86 @@
     /* ═══════════════════════════════════════════════════
        CHART PANEL
     ═══════════════════════════════════════════════════ */
-    function ChartPanel({ params, res }) {
-      const [tab, setTab] = useState('payoff');
-      const payoffRef = useRef(null);
-      const distRef   = useRef(null);
-      const pathsRef  = useRef(null);
-      const charts    = useRef({});
-
-      useEffect(() => {
-        if (!res) return;
-        // destroy previous
-        Object.values(charts.current).forEach(c => c?.destroy());
-        charts.current = {};
-        if (payoffRef.current) charts.current.payoff = createPayoffChart(payoffRef.current, params, res);
-        if (distRef.current)   charts.current.dist   = createDistChart(distRef.current, params);
-        if (pathsRef.current)  charts.current.paths  = createPathsChart(pathsRef.current, params);
-        return () => { Object.values(charts.current).forEach(c=>c?.destroy()); charts.current={}; };
-      }, [res]);
-
-      const captions = {
-        payoff: 'P&L at expiry — green: call, orange: put  |  dashed: Strike & Spot',
-        dist:   'Terminal price distribution · green: call ITM · orange: put ITM',
-        paths:  `${22} simulated GBM paths to T=${params.maturity}y · dashed: Strike`,
-      };
-
-      return (
+    function ChartPanel({params,res,currency}){
+      const[tab,setTab]=useState('payoff');
+      const payoffRef=useRef(null),distRef=useRef(null),pathsRef=useRef(null),charts=useRef({});
+      useEffect(()=>{
+        if(!res) return;
+        Object.values(charts.current).forEach(c=>c?.destroy()); charts.current={};
+        if(payoffRef.current) charts.current.payoff=createPayoffChart(payoffRef.current,params,res,currency);
+        if(distRef.current)   charts.current.dist  =createDistChart(distRef.current,params,currency);
+        if(pathsRef.current)  charts.current.paths =createPathsChart(pathsRef.current,params,currency);
+        return()=>{Object.values(charts.current).forEach(c=>c?.destroy());charts.current={};};
+      },[res]);
+      const captions={payoff:'P&L at expiry — green: call, orange: put  |  dashed: Strike & Spot',dist:'Terminal price distribution · green: call ITM · orange: put ITM',paths:`22 simulated GBM paths to T=${params.maturity}y · dashed: Strike`};
+      return(
         <div className="glass chart-panel">
-          <div className="card-head">
-            <span className="card-tag">Analytics Charts</span>
-            <div className={`sdot ${res ? 'live' : ''}`} />
-          </div>
+          <div className="card-head"><span className="card-tag">Analytics Charts</span><div className={`sdot ${res?'live':''}`}/></div>
           <div className="chart-tabs">
-            {[['payoff','PAYOFF'],['dist','DISTRIBUTION'],['paths','PATHS']].map(([k,label])=>(
-              <button key={k} className={`chart-tab${tab===k?' active':''}`} onClick={()=>setTab(k)}>{label}</button>
+            {[['payoff','PAYOFF'],['dist','DISTRIBUTION'],['paths','PATHS']].map(([k,l])=>(
+              <button key={k} className={`chart-tab${tab===k?' active':''}`} onClick={()=>setTab(k)}>{l}</button>
             ))}
           </div>
           <div className="chart-layers">
             <div className={`chart-layer${tab==='payoff'?' active':''}`}><canvas ref={payoffRef}/></div>
             <div className={`chart-layer${tab==='dist'  ?' active':''}`}><canvas ref={distRef}/></div>
             <div className={`chart-layer${tab==='paths' ?' active':''}`}><canvas ref={pathsRef}/></div>
-            {!res && <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
-              <div className="dots"><span/><span/><span/></div>
-            </div>}
+            {!res&&<div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}><div className="dots"><span/><span/><span/></div></div>}
           </div>
-          {res && <div className="chart-caption">{captions[tab]}</div>}
+          {res&&<div className="chart-caption">{captions[tab]}</div>}
         </div>
       );
     }
 
     /* ═══════════════════════════════════════════════════
-       SUGGESTIONS PANEL
+       SUGGESTIONS
     ═══════════════════════════════════════════════════ */
-    function SuggestionsPanel({ params, res }) {
-      const { spot, strike, rate, vol, maturity } = params;
-      const { call, put } = res;
-      const g = bsGreeks(spot, strike, rate, vol, maturity);
-
-      // Moneyness
-      const mPct = ((spot / strike) - 1) * 100;
-      const moneyLabel = Math.abs(mPct) < 2 ? 'ATM' : mPct > 15 ? 'DEEP ITM' : mPct > 0 ? 'IN THE MONEY' : mPct < -15 ? 'DEEP OTM' : 'OUT OF MONEY';
-      const moneyColor = Math.abs(mPct) < 2 ? '#a855f7' : mPct > 0 ? '#00ff88' : '#f97316';
-      const moneyDesc  = Math.abs(mPct)<2 ? 'Maximum gamma — highest sensitivity to price moves' :
-                         mPct>15  ? 'High delta position, behaves like long stock with protection' :
-                         mPct>0   ? 'Intrinsic value present, lower time-value premium' :
-                         mPct<-15 ? 'Pure time value, needs a large move to be profitable' :
-                                    'Needs a meaningful price move to generate profit';
-      const needleLeft = Math.max(5, Math.min(95, 50 + mPct * 1.6));
-
-      // Breakeven
-      const callBE    = strike + call.price;
-      const putBE     = Math.max(0, strike - put.price);
-      const callBEPct = ((callBE / spot) - 1) * 100;
-      const putBEPct  = ((putBE  / spot) - 1) * 100;
-
-      // Vol regime
-      const vp = vol * 100;
-      const volLabel = vp<15?'LOW':vp<30?'MODERATE':vp<50?'HIGH':'EXTREME';
-      const volColor = vp<15?'#00ff88':vp<30?'#00d4ff':vp<50?'#f97316':'#ec4899';
-
-      // Strategy signal
-      let strat, stratDesc, stratColor;
-      if (vp > 50) {
-        strat='SELL STRADDLE'; stratColor='#f97316';
-        stratDesc='Extreme vol — sell premium, profit from mean reversion and theta decay';
-      } else if (vp < 15) {
-        strat='BUY STRADDLE'; stratColor='#00d4ff';
-        stratDesc='Low vol — options are cheap, go long volatility before a catalyst';
-      } else if (mPct > 10) {
-        strat='COVERED CALL'; stratColor='#00ff88';
-        stratDesc='ITM territory — sell upside via covered call to monetize existing gains';
-      } else if (mPct < -10) {
-        strat='BULL CALL SPREAD'; stratColor='#a855f7';
-        stratDesc='Deep OTM exposure — cap risk and cost with a vertical spread';
-      } else {
-        strat='IRON CONDOR'; stratColor='#ec4899';
-        stratDesc='Near ATM — collect theta, profit from a range-bound, low-move environment';
-      }
-
-      // Risk score
-      const riskScore = Math.min(10, Math.max(1, Math.round(vol*11 + Math.abs(mPct)/14 + maturity*0.4)));
-      const riskColor = riskScore<=3?'#00ff88':riskScore<=5?'#00d4ff':riskScore<=7?'#f97316':'#ec4899';
-      const riskLabel = riskScore<=3?'LOW':riskScore<=5?'MEDIUM':riskScore<=7?'HIGH':'EXTREME';
-
-      return (
+    function SuggestionsPanel({params,res,currency}){
+      const{spot,strike,rate,vol,maturity}=params;
+      const{call,put}=res;
+      const g=bsGreeks(spot,strike,rate,vol,maturity);
+      const mPct=((spot/strike)-1)*100;
+      const moneyLabel=Math.abs(mPct)<2?'ATM':mPct>15?'DEEP ITM':mPct>0?'IN THE MONEY':mPct<-15?'DEEP OTM':'OUT OF MONEY';
+      const moneyColor=Math.abs(mPct)<2?'#a855f7':mPct>0?'#00ff88':'#f97316';
+      const moneyDesc=Math.abs(mPct)<2?'Maximum gamma — highest sensitivity to price moves':mPct>15?'High delta position, behaves like long stock with protection':mPct>0?'Intrinsic value present, lower time-value premium':mPct<-15?'Pure time value, needs a large move to be profitable':'Needs a meaningful price move to generate profit';
+      const needleLeft=Math.max(5,Math.min(95,50+mPct*1.6));
+      const callBE=strike+call.price, putBE=Math.max(0,strike-put.price);
+      const callBEPct=((callBE/spot)-1)*100, putBEPct=((putBE/spot)-1)*100;
+      const vp=vol*100;
+      const volLabel=vp<15?'LOW':vp<30?'MODERATE':vp<50?'HIGH':'EXTREME';
+      const volColor=vp<15?'#00ff88':vp<30?'#00d4ff':vp<50?'#f97316':'#ec4899';
+      let strat,stratDesc,stratColor;
+      if(vp>50){strat='SELL STRADDLE';stratColor='#f97316';stratDesc='Extreme vol — sell premium, profit from mean reversion and theta decay';}
+      else if(vp<15){strat='BUY STRADDLE';stratColor='#00d4ff';stratDesc='Low vol — options are cheap, go long volatility before a catalyst';}
+      else if(mPct>10){strat='COVERED CALL';stratColor='#00ff88';stratDesc='ITM territory — sell upside via covered call to monetize existing gains';}
+      else if(mPct<-10){strat='BULL CALL SPREAD';stratColor='#a855f7';stratDesc='Deep OTM exposure — cap risk and cost with a vertical spread';}
+      else{strat='IRON CONDOR';stratColor='#ec4899';stratDesc='Near ATM — collect theta, profit from a range-bound, low-move environment';}
+      const riskScore=Math.min(10,Math.max(1,Math.round(vol*11+Math.abs(mPct)/14+maturity*0.4)));
+      const riskColor=riskScore<=3?'#00ff88':riskScore<=5?'#00d4ff':riskScore<=7?'#f97316':'#ec4899';
+      const riskLabel=riskScore<=3?'LOW':riskScore<=5?'MEDIUM':riskScore<=7?'HIGH':'EXTREME';
+      const cur=currency;
+      return(
         <div className="suggestions">
-
-          {/* Moneyness */}
           <div className="sug-card">
             <div className="sug-title">MONEYNESS</div>
             <div className="sug-badge" style={{background:moneyColor+'18',color:moneyColor,border:`1px solid ${moneyColor}44`}}>
               {mPct>0?'+':''}{mPct.toFixed(1)}% &nbsp; {moneyLabel}
             </div>
             <div className="sug-desc">{moneyDesc}</div>
-            <div className="money-gauge">
-              <div className="money-needle" style={{left:`${needleLeft}%`}} />
-            </div>
+            <div className="money-gauge"><div className="money-needle" style={{left:`${needleLeft}%`}}/></div>
             <div className="money-labels"><span>DEEP OTM</span><span>ATM</span><span>DEEP ITM</span></div>
           </div>
-
-          {/* Greeks */}
           <div className="sug-card">
             <div className="sug-title">OPTION SENSITIVITY</div>
-            {g ? (
+            {g?(
               <div className="greek-grid">
                 <div className="greek-row">
                   <div style={{display:'flex',flexDirection:'column',gap:'0.05rem'}}>
-                    <span className="greek-key" style={{color:'#e2e8f0',fontSize:'0.62rem'}}>📈 If stock goes up $1</span>
+                    <span className="greek-key" style={{color:'#e2e8f0',fontSize:'0.62rem'}}>📈 If stock goes up {cur}1</span>
                     <span className="greek-key" style={{fontSize:'0.5rem'}}>Call gains · Put loses</span>
                   </div>
                   <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'0.05rem'}}>
-                    <span className="greek-val" style={{color:'#00ff88'}}>+${g.callDelta.toFixed(2)}</span>
+                    <span className="greek-val" style={{color:'#00ff88'}}>+{cur}{g.callDelta.toFixed(2)}</span>
                     <span className="greek-val" style={{color:'#f97316',fontSize:'0.56rem'}}>{g.putDelta.toFixed(2)}</span>
                   </div>
                 </div>
@@ -962,41 +732,33 @@
                     <span className="greek-key" style={{color:'#e2e8f0',fontSize:'0.62rem'}}>⏳ Lost per day</span>
                     <span className="greek-key" style={{fontSize:'0.5rem'}}>Value decays as time passes</span>
                   </div>
-                  <span className="greek-val" style={{color:'#ec4899'}}>${g.callTheta.toFixed(3)}</span>
+                  <span className="greek-val" style={{color:'#ec4899'}}>{cur}{g.callTheta.toFixed(3)}</span>
                 </div>
                 <div className="greek-row">
                   <div style={{display:'flex',flexDirection:'column',gap:'0.05rem'}}>
                     <span className="greek-key" style={{color:'#e2e8f0',fontSize:'0.62rem'}}>🌊 If market gets wilder</span>
                     <span className="greek-key" style={{fontSize:'0.5rem'}}>Gain per +1% volatility spike</span>
                   </div>
-                  <span className="greek-val" style={{color:'#a855f7'}}>${g.vega.toFixed(3)}</span>
+                  <span className="greek-val" style={{color:'#a855f7'}}>{cur}{g.vega.toFixed(3)}</span>
                 </div>
               </div>
-            ) : <div className="sug-desc">N/A for current parameters</div>}
+            ):<div className="sug-desc">N/A for current parameters</div>}
           </div>
-
-          {/* Breakeven */}
           <div className="sug-card">
             <div className="sug-title">BREAKEVEN PRICES</div>
             <div className="be-block">
               <div className="be-label" style={{color:'#00ff88'}}>CALL</div>
-              <div className="be-price">${callBE.toFixed(2)}</div>
-              <div className="be-pct" style={{color:callBEPct>0?'#f97316':'#00ff88'}}>
-                {callBEPct>0?'+':''}{callBEPct.toFixed(1)}% from current spot
-              </div>
+              <div className="be-price">{cur}{callBE.toFixed(2)}</div>
+              <div className="be-pct" style={{color:callBEPct>0?'#f97316':'#00ff88'}}>{callBEPct>0?'+':''}{callBEPct.toFixed(1)}% from spot</div>
             </div>
             <div className="be-divider"/>
             <div className="be-block">
               <div className="be-label" style={{color:'#f97316'}}>PUT</div>
-              <div className="be-price">${putBE.toFixed(2)}</div>
-              <div className="be-pct" style={{color:putBEPct<0?'#f97316':'#00ff88'}}>
-                {putBEPct.toFixed(1)}% from current spot
-              </div>
+              <div className="be-price">{cur}{putBE.toFixed(2)}</div>
+              <div className="be-pct" style={{color:putBEPct<0?'#f97316':'#00ff88'}}>{putBEPct.toFixed(1)}% from spot</div>
             </div>
             <div className="sug-desc" style={{marginTop:'0.2rem'}}>Stock must reach these levels at expiry to break even</div>
           </div>
-
-          {/* Strategy */}
           <div className="sug-card">
             <div className="sug-title">STRATEGY SIGNAL</div>
             <div className="strat-name" style={{color:stratColor}}>{strat}</div>
@@ -1009,24 +771,13 @@
               <span className="greek-val" style={{color:volColor}}>{volLabel} ({vp.toFixed(0)}%)</span>
             </div>
           </div>
-
-          {/* Risk */}
           <div className="sug-card">
             <div className="sug-title">RISK ASSESSMENT</div>
-            <div className="risk-score">
-              <span className="risk-num" style={{color:riskColor}}>{riskScore}</span>
-              <span className="risk-denom">/10</span>
-            </div>
-            <div className="risk-lbl" style={{color:riskColor,background:riskColor+'18',border:`1px solid ${riskColor}44`}}>
-              {riskLabel}
-            </div>
-            <div className="risk-bars">
-              {Array(10).fill(0).map((_,i)=>(
-                <div key={i} className="risk-seg" style={{background:i<riskScore?riskColor:'rgba(255,255,255,0.05)'}}/>
-              ))}
-            </div>
+            <div className="risk-score"><span className="risk-num" style={{color:riskColor}}>{riskScore}</span><span className="risk-denom">/10</span></div>
+            <div className="risk-lbl" style={{color:riskColor,background:riskColor+'18',border:`1px solid ${riskColor}44`}}>{riskLabel}</div>
+            <div className="risk-bars">{Array(10).fill(0).map((_,i)=><div key={i} className="risk-seg" style={{background:i<riskScore?riskColor:'rgba(255,255,255,0.05)'}}/>)}</div>
             <div className="greek-row" style={{marginTop:'0.2rem'}}>
-              <span className="greek-key">T to Maturity</span>
+              <span className="greek-key">Time to Maturity</span>
               <span className="greek-val" style={{color:'#00d4ff'}}>{maturity.toFixed(1)} yr</span>
             </div>
           </div>
@@ -1035,74 +786,102 @@
     }
 
     /* ═══════════════════════════════════════════════════
-       APP
+       REGION SELECTOR
     ═══════════════════════════════════════════════════ */
-    function App() {
-      const scene3d = useRef(null);
+    function RegionSelector({onSelect}){
+      return(
+        <div>
+          <div className="sel-header">
+            <div className="sel-eyebrow"><span className="sel-eyebrow-dot"/>SELECT YOUR MARKET REGION</div>
+            <div className="sel-title">MONTE CARLO ENGINE</div>
+            <div className="sel-sub">Options Pricing · Geometric Brownian Motion · GBM Simulation</div>
+          </div>
 
-      const [params, setParams] = useState({ spot:100, strike:100, rate:0.05, vol:0.20, maturity:1.0, n:50000 });
-      const [res,  setRes]  = useState(null);
-      const [busy, setBusy] = useState(false);
+          <div className="regions-grid">
+            {Object.values(REGIONS).map(r=>(
+              <div key={r.id} className="region-card" style={{'--rc-color':r.color}} onClick={()=>onSelect(r)}>
+                <div className="rc-flag">{r.flag}</div>
+                <div>
+                  <div className="rc-name">{r.name}</div>
+                  <div className="rc-desc" style={{marginTop:'0.35rem'}}>{r.desc}</div>
+                </div>
+                <div className="rc-stats">
+                  {r.stats.map(([k,v])=>(
+                    <div key={k} className="rc-stat">
+                      <span className="rc-stat-key">{k}</span>
+                      <span className="rc-stat-val">{v}</span>
+                    </div>
+                  ))}
+                </div>
+                <button className="rc-btn">ENTER {r.name.toUpperCase()} MARKETS →</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
 
-      useEffect(() => {
-        const canvas = document.getElementById('bg');
-        scene3d.current = new Scene3D(canvas);
+    /* ═══════════════════════════════════════════════════
+       MAIN APP
+    ═══════════════════════════════════════════════════ */
+    function PricingApp({region, onChangeRegion, scene3d}){
+      const cur=region.currency;
+      const[params,setParams]=useState({spot:region.spot,strike:region.spot,rate:region.rate,vol:region.vol,maturity:1.0,n:50000});
+      const[res,setRes]=useState(null);
+      const[busy,setBusy]=useState(false);
 
-        gsap.fromTo('.header',       {y:-44,opacity:0},{y:0,opacity:1,duration:1.05,ease:'power3.out',delay:0.1});
-        gsap.fromTo('.control-panel',{x:-55,opacity:0},{x:0,opacity:1,duration:0.95,ease:'power3.out',delay:0.45});
-        gsap.fromTo('.result-panel', {x: 55,opacity:0},{x:0,opacity:1,duration:0.95,ease:'power3.out',delay:0.65});
-        gsap.fromTo('.chart-panel',  {x: 55,opacity:0},{x:0,opacity:1,duration:0.95,ease:'power3.out',delay:0.8});
+      useEffect(()=>{
+        gsap.fromTo('.header',      {y:-44,opacity:0},{y:0,opacity:1,duration:1.0,ease:'power3.out',delay:0.05});
+        gsap.fromTo('.control-panel',{x:-55,opacity:0},{x:0,opacity:1,duration:0.9,ease:'power3.out',delay:0.25});
+        gsap.fromTo('.result-panel', {x:55, opacity:0},{x:0,opacity:1,duration:0.9,ease:'power3.out',delay:0.4});
+        gsap.fromTo('.chart-panel',  {x:55, opacity:0},{x:0,opacity:1,duration:0.9,ease:'power3.out',delay:0.55});
+        const t=setTimeout(()=>runSim({spot:region.spot,strike:region.spot,rate:region.rate,vol:region.vol,maturity:1.0,n:50000}),1400);
+        return()=>clearTimeout(t);
+      },[region]);
 
-        const timer = setTimeout(()=>runSim({spot:100,strike:100,rate:0.05,vol:0.20,maturity:1.0,n:50000}),1500);
-        return () => { clearTimeout(timer); scene3d.current?.destroy(); };
-      }, []);
-
-      const runSim = useCallback((p) => {
+      const runSim=useCallback((p)=>{
         setBusy(true);
-        setTimeout(() => {
-          const call = mcPrice(p.spot, p.strike, p.rate, p.vol, p.maturity, p.n, 'call');
-          const put  = mcPrice(p.spot, p.strike, p.rate, p.vol, p.maturity, p.n, 'put');
-          const df   = Math.exp(-p.rate * p.maturity);
-          const lhs  = call.price - put.price;
-          const rhs  = p.spot - p.strike * df;
-          setRes({ call, put, lhs, rhs, err:Math.abs(lhs-rhs) });
+        setTimeout(()=>{
+          const call=mcPrice(p.spot,p.strike,p.rate,p.vol,p.maturity,p.n,'call');
+          const put =mcPrice(p.spot,p.strike,p.rate,p.vol,p.maturity,p.n,'put');
+          const df=Math.exp(-p.rate*p.maturity),lhs=call.price-put.price,rhs=p.spot-p.strike*df;
+          setRes({call,put,lhs,rhs,err:Math.abs(lhs-rhs)});
           setBusy(false);
-
-          scene3d.current?.buildPaths(p.rate, p.vol, p.maturity);
-
+          scene3d?.buildPaths(p.rate,p.vol,p.maturity);
           gsap.fromTo('.opt-card',      {y:10,opacity:0},{y:0,opacity:1,stagger:0.07,duration:0.5,ease:'back.out(1.5)'});
           gsap.fromTo('.parity,.sim-info',{y:8,opacity:0},{y:0,opacity:1,stagger:0.06,duration:0.45,ease:'power2.out',delay:0.15});
           gsap.fromTo('.sug-card',      {y:20,opacity:0},{y:0,opacity:1,stagger:0.07,duration:0.55,ease:'back.out(1.4)',delay:0.2});
-          gsap.fromTo('.section-label', {opacity:0},{opacity:1,duration:0.6,delay:0.1});
-        }, 30);
-      }, []);
+        },30);
+      },[scene3d]);
 
-      const set = (k, v) => setParams(p => ({ ...p, [k]: v }));
+      const set=(k,v)=>setParams(p=>({...p,[k]:v}));
+      const handleRun=()=>{gsap.to('.run-btn',{scale:0.95,duration:0.09,yoyo:true,repeat:1});runSim(params);};
+      const confPct=(se,price)=>price?Math.max(6,Math.min(94,(1-Math.min(se/price*25,1))*100)):50;
 
-      const handleRun = () => {
-        gsap.to('.run-btn', { scale:0.95, duration:0.09, yoyo:true, repeat:1, ease:'power1.inOut' });
-        runSim(params);
-      };
-
-      const confPct = (se, price) => price ? Math.max(6, Math.min(94, (1 - Math.min(se/price*25,1))*100)) : 50;
-
-      return (
+      return(
         <>
-          {/* Header */}
           <header className="header">
-            <div className="badge"><span className="badge-dot"/>QUANTITATIVE FINANCE</div>
+            <div className="badge" style={{color:region.color,borderColor:region.color+'44',background:region.color+'10'}}>
+              <span className="badge-dot" style={{background:region.color,boxShadow:`0 0 7px ${region.color}`}}/>
+              QUANTITATIVE FINANCE
+            </div>
             <h1>MONTE CARLO ENGINE</h1>
             <p className="subtitle">Options Pricing via Geometric Brownian Motion</p>
             <div className="header-tags">
-              <span>European Options</span><span className="tag-sep">·</span>
-              <span>Risk-Neutral Pricing</span><span className="tag-sep">·</span>
-              <span>GBM Simulation</span>
+              <span>{region.flag} {region.name}</span><span className="tag-sep">·</span>
+              <span>{region.index}</span><span className="tag-sep">·</span>
+              <span>{region.currencyName} ({cur})</span><span className="tag-sep">·</span>
+              <span>Rate {(region.rate*100).toFixed(1)}%</span>
+            </div>
+            <div style={{display:'flex',justifyContent:'center'}}>
+              <div className="region-pill" style={{'--rc-color':region.color}} onClick={onChangeRegion}>
+                <span className="region-pill-flag">{region.flag}</span>
+                {region.name} — CHANGE REGION ↗
+              </div>
             </div>
           </header>
 
-          {/* Main panels */}
           <div className="panels">
-
             {/* Controls */}
             <div className="glass control-panel">
               <div className="card-head">
@@ -1110,71 +889,142 @@
                 <div className="sdot"/>
               </div>
               <div className="slider-list">
-                <Slider label="Spot Price"       value={params.spot}     min={20}    max={300}    step={1}     fmt={v=>`$${v}`}                  onChange={v=>set('spot',v)}/>
-                <Slider label="Strike Price"     value={params.strike}   min={20}    max={300}    step={1}     fmt={v=>`$${v}`}                  onChange={v=>set('strike',v)}/>
+                <Slider label="Spot Price"       value={params.spot}     min={20}    max={500}    step={1}     fmt={v=>`${cur}${v}`}              onChange={v=>set('spot',v)}/>
+                <Slider label="Strike Price"     value={params.strike}   min={20}    max={500}    step={1}     fmt={v=>`${cur}${v}`}              onChange={v=>set('strike',v)}/>
                 <Slider label="Risk-free Rate"   value={params.rate}     min={0}     max={0.20}   step={0.001} fmt={v=>`${(v*100).toFixed(1)}%`} onChange={v=>set('rate',v)}/>
                 <Slider label="Volatility σ"     value={params.vol}      min={0.05}  max={0.85}   step={0.01}  fmt={v=>`${(v*100).toFixed(0)}%`} onChange={v=>set('vol',v)}/>
-                <Slider label="Time to Maturity" value={params.maturity} min={0.1}   max={3.0}    step={0.1}   fmt={v=>`${v.toFixed(1)} yr`}     onChange={v=>set('maturity',v)}/>
+                <Slider label="Time to Maturity" value={params.maturity} min={0.1}   max={3.0}    step={0.1}   fmt={v=>`${v.toFixed(1)} yr`}      onChange={v=>set('maturity',v)}/>
                 <Slider label="Simulations"      value={params.n}        min={1000}  max={100000} step={1000}  fmt={v=>`${(v/1000).toFixed(0)}K`} onChange={v=>set('n',v)}/>
               </div>
               <button className="run-btn" onClick={handleRun} disabled={busy}>
-                {busy ? <><span className="spin"/>COMPUTING…</> : <>▶ &nbsp;RUN SIMULATION</>}
+                {busy?<><span className="spin"/>COMPUTING…</>:<>▶ &nbsp;RUN SIMULATION</>}
               </button>
             </div>
 
             {/* Results */}
             <div className="glass result-panel">
-              <div className="card-head">
-                <span className="card-tag">Results</span>
-                <div className={`sdot ${res?'live':''}`}/>
-              </div>
-              {res ? (
+              <div className="card-head"><span className="card-tag">Results</span><div className={`sdot ${res?'live':''}`}/></div>
+              {res?(
                 <>
                   <div className="opt-grid">
                     <div className="opt-card">
                       <div className="opt-type">CALL OPTION</div>
-                      <div className="opt-price call"><AnimNum value={res.call.price} dec={4} pre="$"/></div>
-                      <div className="opt-se">σ̂ = <AnimNum value={res.call.se} dec={5} pre="$"/></div>
-                      <div className="opt-ci">95% CI: [<AnimNum value={res.call.ci[0]} dec={3} pre="$"/>,&nbsp;<AnimNum value={res.call.ci[1]} dec={3} pre="$"/>]</div>
+                      <div className="opt-price call"><AnimNum value={res.call.price} dec={4} pre={cur}/></div>
+                      <div className="opt-se">σ̂ = <AnimNum value={res.call.se} dec={5} pre={cur}/></div>
+                      <div className="opt-ci">95% CI: [<AnimNum value={res.call.ci[0]} dec={3} pre={cur}/>,&nbsp;<AnimNum value={res.call.ci[1]} dec={3} pre={cur}/>]</div>
                       <div className="opt-bar"><div className="opt-bar-fill call" style={{width:`${confPct(res.call.se,res.call.price)}%`}}/></div>
                     </div>
                     <div className="opt-card">
                       <div className="opt-type">PUT OPTION</div>
-                      <div className="opt-price put"><AnimNum value={res.put.price} dec={4} pre="$"/></div>
-                      <div className="opt-se">σ̂ = <AnimNum value={res.put.se} dec={5} pre="$"/></div>
-                      <div className="opt-ci">95% CI: [<AnimNum value={res.put.ci[0]} dec={3} pre="$"/>,&nbsp;<AnimNum value={res.put.ci[1]} dec={3} pre="$"/>]</div>
+                      <div className="opt-price put"><AnimNum value={res.put.price} dec={4} pre={cur}/></div>
+                      <div className="opt-se">σ̂ = <AnimNum value={res.put.se} dec={5} pre={cur}/></div>
+                      <div className="opt-ci">95% CI: [<AnimNum value={res.put.ci[0]} dec={3} pre={cur}/>,&nbsp;<AnimNum value={res.put.ci[1]} dec={3} pre={cur}/>]</div>
                       <div className="opt-bar"><div className="opt-bar-fill put" style={{width:`${confPct(res.put.se,res.put.price)}%`}}/></div>
                     </div>
                   </div>
                   <div className="parity">
                     <div className="parity-title">PUT-CALL PARITY CHECK</div>
-                    <div className="p-row"><span className="p-key">C − P</span><span className="p-val"><AnimNum value={res.lhs} dec={4} pre="$"/></span></div>
-                    <div className="p-row"><span className="p-key">S − K · e⁻ʳᵀ</span><span className="p-val"><AnimNum value={res.rhs} dec={4} pre="$"/></span></div>
-                    <div className="p-row err"><span className="p-key">Δ error</span><span className={`p-val ${res.err<0.15?'ok':'warn'}`}><AnimNum value={res.err} dec={6} pre="$"/></span></div>
+                    <div className="p-row"><span className="p-key">C − P</span><span className="p-val"><AnimNum value={res.lhs} dec={4} pre={cur}/></span></div>
+                    <div className="p-row"><span className="p-key">S − K · e⁻ʳᵀ</span><span className="p-val"><AnimNum value={res.rhs} dec={4} pre={cur}/></span></div>
+                    <div className="p-row err"><span className="p-key">Δ error</span><span className={`p-val ${res.err<0.15?'ok':'warn'}`}><AnimNum value={res.err} dec={6} pre={cur}/></span></div>
                   </div>
                   <div className="sim-info"><span>Monte Carlo paths:</span><span className="sim-n">{params.n.toLocaleString()}</span></div>
                 </>
-              ) : (
-                <div className="empty"><div className="dots"><span/><span/><span/></div></div>
-              )}
+              ):<div className="empty"><div className="dots"><span/><span/><span/></div></div>}
             </div>
 
-            {/* Charts */}
-            <ChartPanel params={params} res={res}/>
+            <ChartPanel params={params} res={res} currency={cur}/>
           </div>
 
-          {/* Suggestions */}
-          {res && (
+          {res&&(
             <>
               <div className="section-label">── ANALYSIS &amp; SUGGESTIONS ──</div>
-              <SuggestionsPanel params={params} res={res}/>
+              <SuggestionsPanel params={params} res={res} currency={cur}/>
             </>
           )}
         </>
       );
     }
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+    /* ═══════════════════════════════════════════════════
+       ROOT
+    ═══════════════════════════════════════════════════ */
+    function Root(){
+      const[region,setRegion]=useState(null);
+      const scene3dRef=useRef(null);
+
+      // Boot Three.js once
+      useEffect(()=>{
+        scene3dRef.current=new Scene3D(document.getElementById('bg'));
+        // Animate selector in
+        gsap.fromTo('#selector-screen',{opacity:0,y:30},{opacity:1,y:0,duration:0.9,ease:'power3.out',delay:0.2});
+        return()=>scene3dRef.current?.destroy();
+      },[]);
+
+      const handleSelect=(r)=>{
+        // Update CSS accent
+        document.documentElement.style.setProperty('--accent',r.color);
+        // Animate selector out
+        gsap.to('#selector-screen',{opacity:0,y:-40,duration:0.5,ease:'power2.in',onComplete:()=>{
+          document.getElementById('selector-screen').style.display='none';
+          setRegion(r);
+          gsap.to('#app-screen',{opacity:1,y:0,duration:0.65,ease:'power3.out'});
+        }});
+      };
+
+      const handleChangeRegion=()=>{
+        // Animate app out
+        gsap.to('#app-screen',{opacity:0,y:20,duration:0.4,ease:'power2.in',onComplete:()=>{
+          setRegion(null);
+          document.getElementById('selector-screen').style.display='flex';
+          document.getElementById('selector-screen').style.opacity='0';
+          document.documentElement.style.setProperty('--accent','#00ff88');
+          gsap.to('#selector-screen',{opacity:1,y:0,duration:0.55,ease:'power3.out'});
+        }});
+      };
+
+      return(
+        <>
+          <div id="_selector">
+            {!region&&<RegionSelector onSelect={handleSelect}/>}
+          </div>
+          {region&&<PricingApp region={region} onChangeRegion={handleChangeRegion} scene3d={scene3dRef.current}/>}
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('selector-screen')).render(<RegionSelector onSelect={r=>{
+      document.documentElement.style.setProperty('--accent',r.color);
+      gsap.to('#selector-screen',{opacity:0,y:-40,duration:0.5,ease:'power2.in',onComplete:()=>{
+        document.getElementById('selector-screen').style.display='none';
+        ReactDOM.createRoot(document.getElementById('app-screen')).render(
+          <PricingApp region={r} onChangeRegion={()=>{
+            gsap.to('#app-screen',{opacity:0,y:20,duration:0.4,ease:'power2.in',onComplete:()=>{
+              document.getElementById('app-screen').innerHTML='';
+              document.documentElement.style.setProperty('--accent','#00ff88');
+              const sel=document.getElementById('selector-screen');
+              sel.style.display='flex'; sel.style.opacity='0';
+              ReactDOM.createRoot(sel).render(<RegionSelector onSelect={r2=>{
+                document.documentElement.style.setProperty('--accent',r2.color);
+                gsap.to('#selector-screen',{opacity:0,y:-40,duration:0.5,ease:'power2.in',onComplete:()=>{
+                  sel.style.display='none';
+                  ReactDOM.createRoot(document.getElementById('app-screen')).render(
+                    <PricingApp region={r2} onChangeRegion={()=>location.reload()} scene3d={window._scene3d}/>
+                  );
+                  gsap.to('#app-screen',{opacity:1,y:0,duration:0.65,ease:'power3.out'});
+                }});
+              }}/>);
+              gsap.to('#selector-screen',{opacity:1,y:0,duration:0.55,ease:'power3.out'});
+            }});
+          }} scene3d={window._scene3d}/>
+        );
+        gsap.to('#app-screen',{opacity:1,y:0,duration:0.65,ease:'power3.out'});
+      }});
+    }}/>);
+
+    // Boot scene
+    window._scene3d = new Scene3D(document.getElementById('bg'));
+    gsap.fromTo('#selector-screen',{opacity:0,y:30},{opacity:1,y:0,duration:0.9,ease:'power3.out',delay:0.3});
   </script>
 </body>
 </html>
