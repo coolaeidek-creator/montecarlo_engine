@@ -937,28 +937,39 @@
 
           {/* Greeks */}
           <div className="sug-card">
-            <div className="sug-title">BS GREEKS</div>
+            <div className="sug-title">OPTION SENSITIVITY</div>
             {g ? (
               <div className="greek-grid">
                 <div className="greek-row">
-                  <span className="greek-key">Δ Call</span>
-                  <span className="greek-val" style={{color:'#00ff88'}}>{g.callDelta.toFixed(4)}</span>
+                  <div style={{display:'flex',flexDirection:'column',gap:'0.05rem'}}>
+                    <span className="greek-key" style={{color:'#e2e8f0',fontSize:'0.62rem'}}>📈 If stock goes up $1</span>
+                    <span className="greek-key" style={{fontSize:'0.5rem'}}>Call gains · Put loses</span>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'0.05rem'}}>
+                    <span className="greek-val" style={{color:'#00ff88'}}>+${g.callDelta.toFixed(2)}</span>
+                    <span className="greek-val" style={{color:'#f97316',fontSize:'0.56rem'}}>{g.putDelta.toFixed(2)}</span>
+                  </div>
                 </div>
                 <div className="greek-row">
-                  <span className="greek-key">Δ Put</span>
-                  <span className="greek-val" style={{color:'#f97316'}}>{g.putDelta.toFixed(4)}</span>
+                  <div style={{display:'flex',flexDirection:'column',gap:'0.05rem'}}>
+                    <span className="greek-key" style={{color:'#e2e8f0',fontSize:'0.62rem'}}>⚡ Speed of change</span>
+                    <span className="greek-key" style={{fontSize:'0.5rem'}}>How fast sensitivity accelerates</span>
+                  </div>
+                  <span className="greek-val" style={{color:'#00d4ff'}}>{g.gamma.toFixed(4)}</span>
                 </div>
                 <div className="greek-row">
-                  <span className="greek-key">Γ (Gamma)</span>
-                  <span className="greek-val" style={{color:'#00d4ff'}}>{g.gamma.toFixed(5)}</span>
+                  <div style={{display:'flex',flexDirection:'column',gap:'0.05rem'}}>
+                    <span className="greek-key" style={{color:'#e2e8f0',fontSize:'0.62rem'}}>⏳ Lost per day</span>
+                    <span className="greek-key" style={{fontSize:'0.5rem'}}>Value decays as time passes</span>
+                  </div>
+                  <span className="greek-val" style={{color:'#ec4899'}}>${g.callTheta.toFixed(3)}</span>
                 </div>
                 <div className="greek-row">
-                  <span className="greek-key">θ Call/day</span>
-                  <span className="greek-val" style={{color:'#ec4899'}}>${g.callTheta.toFixed(4)}</span>
-                </div>
-                <div className="greek-row">
-                  <span className="greek-key">ν Vega/1%σ</span>
-                  <span className="greek-val" style={{color:'#a855f7'}}>${g.vega.toFixed(4)}</span>
+                  <div style={{display:'flex',flexDirection:'column',gap:'0.05rem'}}>
+                    <span className="greek-key" style={{color:'#e2e8f0',fontSize:'0.62rem'}}>🌊 If market gets wilder</span>
+                    <span className="greek-key" style={{fontSize:'0.5rem'}}>Gain per +1% volatility spike</span>
+                  </div>
+                  <span className="greek-val" style={{color:'#a855f7'}}>${g.vega.toFixed(3)}</span>
                 </div>
               </div>
             ) : <div className="sug-desc">N/A for current parameters</div>}
