@@ -32,3 +32,4 @@ Thumbs.db
 # Distribution / packaging
 *.whl
 *.tar.gz
+.vercel
