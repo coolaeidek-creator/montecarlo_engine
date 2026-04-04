@@ -1,6 +1,6 @@
 import numpy as np
 from .models import MarketEnvironment, OptionContract
-from .random import generate_standard_normal, generate_antithetic
+from .random import generate_standard_normal, generate_antithetic, generate_stratified, generate_sobol
 from .simulator import simulate_terminal_prices
 from .payoff import calculate_payoff
 from .analytical import bs_price
@@ -14,6 +14,8 @@ class OptionPricer:
     - Standard Monte Carlo
     - Antithetic variates (variance reduction)
     - Control variates (variance reduction using delta hedge)
+    - Stratified sampling (quasi-random coverage)
+    - Sobol quasi-random sequences (low-discrepancy)
     - Black-Scholes analytical validation
     """
 
@@ -24,7 +26,7 @@ class OptionPricer:
         n_simulations : int
             Number of Monte Carlo paths to simulate
         method : str
-            'standard', 'antithetic', or 'control_variate'
+            'standard', 'antithetic', 'control_variate', 'stratified', or 'sobol'
         """
         self.n_simulations = n_simulations
         self.method = method
@@ -48,6 +50,10 @@ class OptionPricer:
             pv_payoffs = self._price_antithetic(market, contract, discount_factor)
         elif self.method == "control_variate":
             pv_payoffs = self._price_control_variate(market, contract, discount_factor)
+        elif self.method == "stratified":
+            pv_payoffs = self._price_stratified(market, contract, discount_factor)
+        elif self.method == "sobol":
+            pv_payoffs = self._price_sobol(market, contract, discount_factor)
         else:
             pv_payoffs = self._price_standard(market, contract, discount_factor)
 
@@ -119,6 +125,20 @@ class OptionPricer:
         # Adjusted payoffs
         adjusted = discounted_payoffs + c_star * control
         return adjusted
+
+    def _price_stratified(self, market, contract, discount_factor):
+        """Stratified sampling — better coverage of the distribution."""
+        shocks = generate_stratified(self.n_simulations)
+        terminal_prices = simulate_terminal_prices(market, shocks)
+        payoffs = calculate_payoff(terminal_prices, contract)
+        return payoffs * discount_factor
+
+    def _price_sobol(self, market, contract, discount_factor):
+        """Sobol quasi-random sequence — low-discrepancy sampling."""
+        shocks = generate_sobol(self.n_simulations)
+        terminal_prices = simulate_terminal_prices(market, shocks)
+        payoffs = calculate_payoff(terminal_prices, contract)
+        return payoffs * discount_factor
 
 
 def price_option(

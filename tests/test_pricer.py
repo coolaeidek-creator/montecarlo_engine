@@ -88,6 +88,28 @@ class TestControlVariateMC:
         assert result["method"] == "control_variate"
 
 
+class TestStratifiedMC:
+    def test_stratified_converges(self, market, atm_call):
+        pricer = OptionPricer(n_simulations=50000, method="stratified")
+        result = pricer.price(market, atm_call)
+        assert abs(result["price"] - result["bs_price"]) < 3 * result["std_error"]
+
+    def test_stratified_method_field(self, market, atm_call):
+        result = price_option(market, atm_call, method="stratified")
+        assert result["method"] == "stratified"
+
+
+class TestSobolMC:
+    def test_sobol_converges(self, market, atm_call):
+        pricer = OptionPricer(n_simulations=50000, method="sobol")
+        result = pricer.price(market, atm_call)
+        assert abs(result["price"] - result["bs_price"]) < 3 * result["std_error"]
+
+    def test_sobol_method_field(self, market, atm_call):
+        result = price_option(market, atm_call, method="sobol")
+        assert result["method"] == "sobol"
+
+
 class TestEdgeCases:
     def test_deep_itm(self, market):
         contract = OptionContract(strike=50, option_type="call")
