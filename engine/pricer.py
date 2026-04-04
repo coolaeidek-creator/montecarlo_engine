@@ -13,6 +13,7 @@ class OptionPricer:
     Supports:
     - Standard Monte Carlo
     - Antithetic variates (variance reduction)
+    - Control variates (variance reduction using delta hedge)
     - Black-Scholes analytical validation
     """
 
@@ -23,7 +24,7 @@ class OptionPricer:
         n_simulations : int
             Number of Monte Carlo paths to simulate
         method : str
-            'standard' or 'antithetic'
+            'standard', 'antithetic', or 'control_variate'
         """
         self.n_simulations = n_simulations
         self.method = method
@@ -45,6 +46,8 @@ class OptionPricer:
 
         if self.method == "antithetic":
             pv_payoffs = self._price_antithetic(market, contract, discount_factor)
+        elif self.method == "control_variate":
+            pv_payoffs = self._price_control_variate(market, contract, discount_factor)
         else:
             pv_payoffs = self._price_standard(market, contract, discount_factor)
 
@@ -85,6 +88,37 @@ class OptionPricer:
         # Average each antithetic pair
         avg_payoffs = (pay_pos + pay_neg) / 2.0
         return avg_payoffs * discount_factor
+
+    def _price_control_variate(self, market, contract, discount_factor):
+        """
+        Control variate method: use the stock price as a control variate.
+
+        The idea: S_T is correlated with the payoff. We know E[S_T] = S * e^(rT).
+        Adjust the payoff estimate by subtracting the error in the control.
+
+        Y_cv = payoff - c * (S_T - E[S_T])
+
+        where c = -Cov(payoff, S_T) / Var(S_T) is the optimal coefficient.
+        """
+        shocks = generate_standard_normal(self.n_simulations)
+        terminal_prices = simulate_terminal_prices(market, shocks)
+        payoffs = calculate_payoff(terminal_prices, contract)
+        discounted_payoffs = payoffs * discount_factor
+
+        # Control variate: S_T vs its known expectation
+        expected_ST = market.spot * np.exp(market.rate * market.maturity)
+        control = terminal_prices - expected_ST
+
+        # Optimal coefficient via regression
+        cov = np.cov(discounted_payoffs, control)
+        if cov[1, 1] > 0:
+            c_star = -cov[0, 1] / cov[1, 1]
+        else:
+            c_star = 0.0
+
+        # Adjusted payoffs
+        adjusted = discounted_payoffs + c_star * control
+        return adjusted
 
 
 def price_option(

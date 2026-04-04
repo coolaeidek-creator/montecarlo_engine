@@ -610,6 +610,31 @@
       return{price:p, se, ci:[p-1.96*se, p+1.96*se]};
     }
 
+    function mcPriceControlVariate(S,K,r,sigma,T,N,type){
+      const drift=(r-0.5*sigma*sigma)*T,diff=sigma*Math.sqrt(T),disc=Math.exp(-r*T);
+      const eST=S*Math.exp(r*T); // E[S_T] under risk-neutral
+      const payoffs=[],controls=[];
+      for(let i=0;i<N;i++){
+        const z=randn();
+        const ST=S*Math.exp(drift+diff*z);
+        const pay=type==='call'?Math.max(ST-K,0):Math.max(K-ST,0);
+        payoffs.push(disc*pay);
+        controls.push(ST-eST);
+      }
+      // Optimal c* = -Cov(Y,C)/Var(C)
+      let sumY=0,sumC=0,sumYC=0,sumCC=0;
+      for(let i=0;i<N;i++){sumY+=payoffs[i];sumC+=controls[i];sumYC+=payoffs[i]*controls[i];sumCC+=controls[i]*controls[i];}
+      const muY=sumY/N,muC=sumC/N;
+      const covYC=sumYC/N-muY*muC,varC=sumCC/N-muC*muC;
+      const cStar=varC>0?-covYC/varC:0;
+      // Adjusted payoffs
+      let adjSum=0,adjSum2=0;
+      for(let i=0;i<N;i++){const a=payoffs[i]+cStar*controls[i];adjSum+=a;adjSum2+=a*a;}
+      const mu=adjSum/N,v2=Math.max(adjSum2/N-mu*mu,0);
+      const se=Math.sqrt(v2/N);
+      return{price:mu,se,ci:[mu-1.96*se,mu+1.96*se]};
+    }
+
     /* ═══════════════════════════════════════════════════
        CHART.JS
     ═══════════════════════════════════════════════════ */
@@ -1180,6 +1205,183 @@
     }
 
     /* ═══════════════════════════════════════════════════
+       OPTION CHAIN HEATMAP
+    ═══════════════════════════════════════════════════ */
+    function OptionChain({params,currency}){
+      const{spot,rate,vol}=params;
+      const cur=currency;
+      const[chainType,setChainType]=useState('call');
+      const[chainData,setChainData]=useState(null);
+
+      useEffect(()=>{
+        const strikes=[];
+        const step=spot>5000?500:spot>500?50:spot>50?10:5;
+        for(let k=Math.round(spot*0.7/step)*step;k<=spot*1.3;k+=step) strikes.push(k);
+        const maturities=[0.083,0.25,0.5,1.0,2.0];
+        const matLabels=['1M','3M','6M','1Y','2Y'];
+        const grid=[];
+        for(let i=0;i<maturities.length;i++){
+          const row=[];
+          for(let j=0;j<strikes.length;j++){
+            row.push(bsPrice(spot,strikes[j],rate,vol,maturities[i],chainType));
+          }
+          grid.push(row);
+        }
+        // Find min/max for color scale
+        const flat=grid.flat();
+        const mn=Math.min(...flat),mx=Math.max(...flat);
+        setChainData({strikes,matLabels,grid,mn,mx});
+      },[spot,rate,vol,chainType]);
+
+      if(!chainData) return null;
+      const{strikes,matLabels,grid,mn,mx}=chainData;
+      const heatColor=(v)=>{
+        const t=mx>mn?(v-mn)/(mx-mn):0.5;
+        if(chainType==='call'){
+          const r=Math.round(0+t*0),g=Math.round(100+t*155),b=Math.round(50+t*86);
+          return `rgb(${r},${g},${b})`;
+        }else{
+          const r=Math.round(100+t*149),g=Math.round(50+t*65),b=Math.round(0+t*22);
+          return `rgb(${r},${g},${b})`;
+        }
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1rem',padding:'1rem 1.2rem',overflowX:'auto'}}>
+          <div className="card-head"><span className="card-tag">Option Chain Heatmap</span><div className="sdot live"/></div>
+          <div style={{display:'flex',gap:'0.3rem',margin:'0.5rem 0'}}>
+            <button className={'method-btn'+(chainType==='call'?' active':'')} style={{fontSize:'0.5rem',padding:'0.2rem 0.5rem'}} onClick={()=>setChainType('call')}>CALL</button>
+            <button className={'method-btn'+(chainType==='put'?' active':'')} style={{fontSize:'0.5rem',padding:'0.2rem 0.5rem'}} onClick={()=>setChainType('put')}>PUT</button>
+          </div>
+          <div style={{overflowX:'auto'}}>
+            <table style={{borderCollapse:'collapse',width:'100%',fontFamily:'JetBrains Mono',fontSize:'0.5rem'}}>
+              <thead>
+                <tr>
+                  <th style={{padding:'0.3rem',color:'var(--muted)',textAlign:'left',borderBottom:'1px solid var(--border)'}}>Strike →</th>
+                  {strikes.map(k=>(
+                    <th key={k} style={{padding:'0.3rem',color:Math.abs(k-spot)<(strikes[1]-strikes[0])?'var(--accent)':'var(--muted)',textAlign:'center',borderBottom:'1px solid var(--border)',minWidth:'48px'}}>
+                      {cur}{k.toLocaleString()}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {grid.map((row,i)=>(
+                  <tr key={i}>
+                    <td style={{padding:'0.3rem 0.4rem',color:'var(--text)',fontWeight:500,borderRight:'1px solid var(--border)'}}>{matLabels[i]}</td>
+                    {row.map((v,j)=>(
+                      <td key={j} style={{
+                        padding:'0.25rem 0.3rem',textAlign:'center',
+                        background:heatColor(v)+'22',color:heatColor(v),
+                        border:'1px solid rgba(255,255,255,0.03)',
+                        fontWeight:Math.abs(strikes[j]-spot)<(strikes[1]-strikes[0])?600:400,
+                      }}>
+                        {v<10?v.toFixed(2):v<100?v.toFixed(1):v.toFixed(0)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{marginTop:'0.4rem',fontFamily:'JetBrains Mono',fontSize:'0.45rem',color:'var(--muted)'}}>
+            BS {chainType} prices across strikes and maturities · Spot = {cur}{spot.toLocaleString()} · σ = {(vol*100).toFixed(0)}%
+          </div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
+       MC CONVERGENCE ANALYSIS
+    ═══════════════════════════════════════════════════ */
+    function ConvergencePanel({params,currency}){
+      const{spot,strike,rate,vol,maturity}=params;
+      const cur=currency;
+      const canvasRef=useRef(null);
+      const chartRef=useRef(null);
+      const[convData,setConvData]=useState(null);
+
+      const runConvergence=()=>{
+        const steps=[100,500,1000,2000,5000,10000,20000,50000,100000];
+        const bsVal=bsPrice(spot,strike,rate,vol,maturity,'call');
+        const mcPrices=[],mcSEs=[],antiPrices=[],antiSEs=[];
+        for(const n of steps){
+          const mc=mcPrice(spot,strike,rate,vol,maturity,n,'call');
+          const anti=mcPriceAntithetic(spot,strike,rate,vol,maturity,n,'call');
+          mcPrices.push(mc.price);mcSEs.push(mc.se);
+          antiPrices.push(anti.price);antiSEs.push(anti.se);
+        }
+        setConvData({steps,bsVal,mcPrices,mcSEs,antiPrices,antiSEs});
+      };
+
+      useEffect(()=>{
+        if(!convData||!canvasRef.current)return;
+        if(chartRef.current)chartRef.current.destroy();
+        const{steps,bsVal,mcPrices,antiPrices}=convData;
+        chartRef.current=new Chart(canvasRef.current,{
+          type:'line',
+          data:{
+            labels:steps.map(n=>n>=1000?(n/1000)+'K':n+''),
+            datasets:[
+              {label:'Standard MC',data:mcPrices,borderColor:'#00d4ff',borderWidth:2,pointRadius:3,pointBackgroundColor:'#00d4ff',tension:0.2,fill:false},
+              {label:'Antithetic MC',data:antiPrices,borderColor:'#a855f7',borderWidth:2,pointRadius:3,pointBackgroundColor:'#a855f7',tension:0.2,fill:false},
+              {label:'BS Analytical',data:steps.map(()=>bsVal),borderColor:'#00ff88',borderWidth:1.5,borderDash:[6,3],pointRadius:0,fill:false},
+            ]
+          },
+          options:{
+            responsive:true,maintainAspectRatio:false,
+            plugins:{
+              legend:{labels:{color:'rgba(226,232,240,0.6)',font:{family:'JetBrains Mono',size:9},boxWidth:12}},
+              tooltip:{backgroundColor:'rgba(3,7,18,0.92)',titleColor:'#e2e8f0',bodyColor:'#e2e8f0',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,
+                titleFont:{family:'JetBrains Mono',size:10},bodyFont:{family:'JetBrains Mono',size:10},
+                callbacks:{title:c=>'N = '+c[0].label+' sims',label:c=>c.dataset.label+': '+cur+c.raw.toFixed(4)}},
+            },
+            scales:{
+              x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'rgba(226,232,240,0.35)',font:{family:'JetBrains Mono',size:9}},title:{display:true,text:'Simulations',color:'rgba(226,232,240,0.35)',font:{family:'JetBrains Mono',size:9}}},
+              y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'rgba(226,232,240,0.35)',font:{family:'JetBrains Mono',size:9},callback:v=>cur+v.toFixed(2)},title:{display:true,text:'Call Price',color:'rgba(226,232,240,0.35)',font:{family:'JetBrains Mono',size:9}}},
+            }
+          }
+        });
+      },[convData]);
+
+      return(
+        <div className="glass" style={{marginTop:'1rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">MC Convergence Analysis</span><div className="sdot"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--muted)',margin:'0.3rem 0 0.5rem'}}>
+            How MC price converges to BS analytical as N increases (100 → 100K)
+          </div>
+          <button className="run-btn" style={{fontSize:'0.55rem',padding:'0.4rem 1rem',marginBottom:'0.5rem'}} onClick={runConvergence}>
+            RUN CONVERGENCE TEST
+          </button>
+          {convData&&(
+            <>
+              <div style={{height:'220px',position:'relative'}}>
+                <canvas ref={canvasRef}/>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.4rem',marginTop:'0.5rem'}}>
+                <div style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.12)',borderRadius:'6px',padding:'0.35rem',fontFamily:'JetBrains Mono',fontSize:'0.48rem'}}>
+                  <div style={{color:'var(--muted)'}}>STD MC (100K)</div>
+                  <div style={{color:'#00d4ff',fontSize:'0.7rem'}}>{cur}{convData.mcPrices[convData.mcPrices.length-1].toFixed(4)}</div>
+                  <div style={{color:'var(--muted)'}}>SE: {cur}{convData.mcSEs[convData.mcSEs.length-1].toFixed(5)}</div>
+                </div>
+                <div style={{background:'rgba(168,85,247,0.06)',border:'1px solid rgba(168,85,247,0.12)',borderRadius:'6px',padding:'0.35rem',fontFamily:'JetBrains Mono',fontSize:'0.48rem'}}>
+                  <div style={{color:'var(--muted)'}}>ANTI MC (100K)</div>
+                  <div style={{color:'#a855f7',fontSize:'0.7rem'}}>{cur}{convData.antiPrices[convData.antiPrices.length-1].toFixed(4)}</div>
+                  <div style={{color:'var(--muted)'}}>SE: {cur}{convData.antiSEs[convData.antiSEs.length-1].toFixed(5)}</div>
+                </div>
+                <div style={{background:'rgba(0,255,136,0.06)',border:'1px solid rgba(0,255,136,0.12)',borderRadius:'6px',padding:'0.35rem',fontFamily:'JetBrains Mono',fontSize:'0.48rem'}}>
+                  <div style={{color:'var(--muted)'}}>BS EXACT</div>
+                  <div style={{color:'#00ff88',fontSize:'0.7rem'}}>{cur}{convData.bsVal.toFixed(4)}</div>
+                  <div style={{color:'var(--muted)'}}>closed-form</div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
        REGION SELECTOR
     ═══════════════════════════════════════════════════ */
     function RegionSelector({onSelect}){
@@ -1253,7 +1455,7 @@
       const runSim=useCallback((p)=>{
         setBusy(true);
         setTimeout(()=>{
-          const priceFn=method==='antithetic'?mcPriceAntithetic:mcPrice;
+          const priceFn=method==='antithetic'?mcPriceAntithetic:method==='control'?mcPriceControlVariate:mcPrice;
           const call=priceFn(p.spot,p.strike,p.rate,p.vol,p.maturity,p.n,'call');
           const put =priceFn(p.spot,p.strike,p.rate,p.vol,p.maturity,p.n,'put');
           const bsCall=bsPrice(p.spot,p.strike,p.rate,p.vol,p.maturity,'call');
@@ -1286,7 +1488,7 @@
               {selStock?<><span style={{color:region.color,fontWeight:600}}>{selStock.t}</span><span className="tag-sep">·</span><span>{cur}{selStock.p.toLocaleString()}</span><span className="tag-sep">·</span></>
               :<><span>{region.index}</span><span className="tag-sep">·</span></>}
               <span>{region.currencyName} ({cur})</span><span className="tag-sep">·</span>
-              <span>{method==='antithetic'?'Antithetic MC':'Standard MC'}</span>
+              <span>{method==='antithetic'?'Antithetic MC':method==='control'?'Control Variate MC':'Standard MC'}</span>
             </div>
             <div style={{display:'flex',justifyContent:'center'}}>
               <div className="region-pill" style={{'--rc-color':region.color}} onClick={onChangeRegion}>
@@ -1331,8 +1533,9 @@
 
               {/* Method Toggle */}
               <div className="method-row">
-                <button className={`method-btn${method==='standard'?' active':''}`} onClick={()=>setMethod('standard')}>STANDARD MC</button>
-                <button className={`method-btn${method==='antithetic'?' active':''}`} onClick={()=>setMethod('antithetic')}>ANTITHETIC VAR</button>
+                <button className={`method-btn${method==='standard'?' active':''}`} onClick={()=>setMethod('standard')}>STANDARD</button>
+                <button className={`method-btn${method==='antithetic'?' active':''}`} onClick={()=>setMethod('antithetic')}>ANTITHETIC</button>
+                <button className={`method-btn${method==='control'?' active':''}`} onClick={()=>setMethod('control')}>CONTROL VAR</button>
               </div>
 
               <button className="run-btn" onClick={handleRun} disabled={busy}>
@@ -1405,6 +1608,10 @@
               <ExoticPanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── RISK METRICS ──</div>
               <RiskPanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── OPTION CHAIN ──</div>
+              <OptionChain params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── CONVERGENCE ANALYSIS ──</div>
+              <ConvergencePanel params={params} currency={cur}/>
             </>
           )}
         </>

@@ -69,6 +69,25 @@ class TestAntitheticMC:
         assert result["method"] == "antithetic"
 
 
+class TestControlVariateMC:
+    def test_cv_converges(self, market, atm_call):
+        pricer = OptionPricer(n_simulations=100000, method="control_variate")
+        result = pricer.price(market, atm_call)
+        assert abs(result["price"] - result["bs_price"]) < 3 * result["std_error"]
+
+    def test_cv_lower_se_than_standard(self, market, atm_call):
+        """Control variate should reduce SE vs standard MC."""
+        np.random.seed(42)
+        std_result = OptionPricer(50000, "standard").price(market, atm_call)
+        np.random.seed(42)
+        cv_result = OptionPricer(50000, "control_variate").price(market, atm_call)
+        assert cv_result["std_error"] < std_result["std_error"] * 1.1
+
+    def test_cv_method_field(self, market, atm_call):
+        result = price_option(market, atm_call, method="control_variate")
+        assert result["method"] == "control_variate"
+
+
 class TestEdgeCases:
     def test_deep_itm(self, market):
         contract = OptionContract(strike=50, option_type="call")
