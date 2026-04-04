@@ -1382,6 +1382,207 @@
     }
 
     /* ═══════════════════════════════════════════════════
+       GREEKS SENSITIVITY CHART
+    ═══════════════════════════════════════════════════ */
+    function GreeksSurface({params,currency}){
+      const{spot,strike,rate,vol,maturity}=params;
+      const cur=currency;
+      const canvasRef=useRef(null);
+      const chartRef=useRef(null);
+      const[greek,setGreek]=useState('delta');
+
+      useEffect(()=>{
+        if(!canvasRef.current)return;
+        if(chartRef.current)chartRef.current.destroy();
+        const step=spot>5000?100:spot>500?10:spot>50?2:1;
+        const lo=Math.max(step,Math.round(spot*0.5/step)*step);
+        const hi=Math.round(spot*1.5/step)*step;
+        const spots=[];
+        for(let s=lo;s<=hi;s+=step) spots.push(s);
+
+        const callVals=[],putVals=[];
+        for(const s of spots){
+          const g=bsGreeks(s,strike,rate,vol,maturity);
+          if(!g){callVals.push(0);putVals.push(0);continue;}
+          if(greek==='delta'){callVals.push(g.callDelta);putVals.push(g.putDelta);}
+          else if(greek==='gamma'){callVals.push(g.gamma);putVals.push(g.gamma);}
+          else if(greek==='theta'){callVals.push(g.callTheta);putVals.push(g.putTheta);}
+          else if(greek==='vega'){callVals.push(g.vega);putVals.push(g.vega);}
+        }
+
+        const datasets=[
+          {label:'Call '+greek.charAt(0).toUpperCase()+greek.slice(1),data:callVals,borderColor:'#00ff88',borderWidth:2,pointRadius:0,tension:0.3,fill:false},
+        ];
+        if(greek==='delta'||greek==='theta'){
+          datasets.push({label:'Put '+greek.charAt(0).toUpperCase()+greek.slice(1),data:putVals,borderColor:'#f97316',borderWidth:2,pointRadius:0,tension:0.3,fill:false});
+        }
+        // Add strike vertical reference
+        const strikeIdx=spots.findIndex(s=>s>=strike);
+
+        const greekColors={delta:'#00ff88',gamma:'#00d4ff',theta:'#ec4899',vega:'#a855f7'};
+        chartRef.current=new Chart(canvasRef.current,{
+          type:'line',
+          data:{labels:spots.map(s=>s.toString()),datasets},
+          options:{
+            responsive:true,maintainAspectRatio:false,
+            plugins:{
+              legend:{labels:{color:'rgba(226,232,240,0.6)',font:{family:'JetBrains Mono',size:9},boxWidth:12}},
+              tooltip:{backgroundColor:'rgba(3,7,18,0.92)',titleColor:'#e2e8f0',bodyColor:'#e2e8f0',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,
+                titleFont:{family:'JetBrains Mono',size:10},bodyFont:{family:'JetBrains Mono',size:10},
+                callbacks:{title:c=>'Spot = '+cur+c[0].label,label:c=>c.dataset.label+': '+c.raw.toFixed(4)}},
+              vline:{lines:[{value:strikeIdx,color:'rgba(255,255,255,0.25)',dash:[4,4],label:'K='+cur+strike}]},
+            },
+            scales:{
+              x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'rgba(226,232,240,0.35)',font:{family:'JetBrains Mono',size:9},maxTicksLimit:8,callback:(v,i)=>cur+spots[i]}},
+              y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'rgba(226,232,240,0.35)',font:{family:'JetBrains Mono',size:9},callback:v=>v.toFixed(3)}},
+            }
+          }
+        });
+      },[spot,strike,rate,vol,maturity,greek]);
+
+      return(
+        <div className="glass" style={{marginTop:'1rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Greeks Sensitivity</span><div className="sdot live"/></div>
+          <div style={{display:'flex',gap:'0.3rem',margin:'0.4rem 0'}}>
+            {['delta','gamma','theta','vega'].map(g=>(
+              <button key={g} className={'method-btn'+(greek===g?' active':'')} style={{fontSize:'0.5rem',padding:'0.2rem 0.5rem'}} onClick={()=>setGreek(g)}>
+                {g.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <div style={{height:'200px',position:'relative'}}>
+            <canvas ref={canvasRef}/>
+          </div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.45rem',color:'var(--muted)',marginTop:'0.3rem'}}>
+            {greek==='delta'&&'How option value changes per $1 stock move (call: 0→1, put: -1→0)'}
+            {greek==='gamma'&&'Rate of change of delta — peaks at ATM, measures convexity risk'}
+            {greek==='theta'&&'Daily time decay — negative for long options, steepest near ATM at expiry'}
+            {greek==='vega'&&'Sensitivity to 1% change in implied volatility — highest at ATM'}
+          </div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
+       STRATEGY P&L BUILDER
+    ═══════════════════════════════════════════════════ */
+    function StrategyBuilder({params,currency}){
+      const{spot,strike,rate,vol,maturity}=params;
+      const cur=currency;
+      const canvasRef=useRef(null);
+      const chartRef=useRef(null);
+      const[strat,setStrat]=useState('bull_call_spread');
+
+      useEffect(()=>{
+        if(!canvasRef.current)return;
+        if(chartRef.current)chartRef.current.destroy();
+
+        const step=spot>5000?100:spot>500?10:spot>50?2:1;
+        const lo=Math.max(step,Math.round(spot*0.6/step)*step);
+        const hi=Math.round(spot*1.4/step)*step;
+        const prices=[];
+        for(let s=lo;s<=hi;s+=step) prices.push(s);
+
+        const K=strike;
+        const K2=Math.round(K*1.1/step)*step; // upper strike
+        const K3=Math.round(K*0.9/step)*step; // lower strike
+
+        let pnlData=[],label='',color='#00ff88';
+        const bsC1=bsPrice(spot,K,rate,vol,maturity,'call');
+        const bsP1=bsPrice(spot,K,rate,vol,maturity,'put');
+        const bsC2=bsPrice(spot,K2,rate,vol,maturity,'call');
+        const bsP2=bsPrice(spot,K3,rate,vol,maturity,'put');
+
+        if(strat==='bull_call_spread'){
+          label='Bull Call Spread';color='#00ff88';
+          pnlData=prices.map(s=>Math.max(s-K,0)-Math.max(s-K2,0)-(bsC1-bsC2));
+        }else if(strat==='bear_put_spread'){
+          label='Bear Put Spread';color='#f97316';
+          pnlData=prices.map(s=>Math.max(K-s,0)-Math.max(K3-s,0)-(bsP1-bsP2));
+        }else if(strat==='straddle'){
+          label='Long Straddle';color='#a855f7';
+          pnlData=prices.map(s=>Math.max(s-K,0)+Math.max(K-s,0)-(bsC1+bsP1));
+        }else if(strat==='strangle'){
+          label='Long Strangle';color='#00d4ff';
+          const bsCH=bsPrice(spot,K2,rate,vol,maturity,'call');
+          const bsPL=bsPrice(spot,K3,rate,vol,maturity,'put');
+          pnlData=prices.map(s=>Math.max(s-K2,0)+Math.max(K3-s,0)-(bsCH+bsPL));
+        }else if(strat==='iron_condor'){
+          label='Iron Condor';color='#ec4899';
+          const KL1=K3,KL2=Math.round(K*0.8/step)*step;
+          const KH1=K2,KH2=Math.round(K*1.2/step)*step;
+          const credit=bsPrice(spot,KL1,rate,vol,maturity,'put')-bsPrice(spot,KL2,rate,vol,maturity,'put')
+            +bsPrice(spot,KH1,rate,vol,maturity,'call')-bsPrice(spot,KH2,rate,vol,maturity,'call');
+          pnlData=prices.map(s=>{
+            const putSpread=Math.max(KL1-s,0)-Math.max(KL2-s,0);
+            const callSpread=Math.max(s-KH1,0)-Math.max(s-KH2,0);
+            return credit-putSpread-callSpread;
+          });
+        }else if(strat==='butterfly'){
+          label='Butterfly Spread';color='#fbbf24';
+          const bsCM=bsPrice(spot,K,rate,vol,maturity,'call');
+          const bsCL=bsPrice(spot,K3,rate,vol,maturity,'call');
+          const bsCH=bsPrice(spot,K2,rate,vol,maturity,'call');
+          const cost=bsCL-2*bsCM+bsCH;
+          pnlData=prices.map(s=>Math.max(s-K3,0)-2*Math.max(s-K,0)+Math.max(s-K2,0)-cost);
+        }
+
+        const zeroLine=prices.map(()=>0);
+
+        chartRef.current=new Chart(canvasRef.current,{
+          type:'line',
+          data:{
+            labels:prices.map(p=>p.toString()),
+            datasets:[
+              {label:label,data:pnlData,borderColor:color,borderWidth:2.5,pointRadius:0,tension:0.15,
+                fill:{target:'origin',above:color+'18',below:'rgba(249,115,22,0.1)'}},
+              {label:'',data:zeroLine,borderColor:'rgba(255,255,255,0.15)',borderWidth:1,borderDash:[3,4],pointRadius:0,fill:false},
+            ]
+          },
+          options:{
+            responsive:true,maintainAspectRatio:false,
+            plugins:{
+              legend:{labels:{filter:i=>i.text!=='',color:'rgba(226,232,240,0.6)',font:{family:'JetBrains Mono',size:9},boxWidth:12}},
+              tooltip:{backgroundColor:'rgba(3,7,18,0.92)',titleColor:'#e2e8f0',bodyColor:'#e2e8f0',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,
+                titleFont:{family:'JetBrains Mono',size:10},bodyFont:{family:'JetBrains Mono',size:10},
+                callbacks:{title:c=>'S_T = '+cur+c[0].label,label:c=>c.dataset.label?c.dataset.label+': '+cur+c.raw.toFixed(2):''}},
+            },
+            scales:{
+              x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'rgba(226,232,240,0.35)',font:{family:'JetBrains Mono',size:9},maxTicksLimit:8,callback:(v,i)=>cur+prices[i]}},
+              y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'rgba(226,232,240,0.35)',font:{family:'JetBrains Mono',size:9},callback:v=>cur+v.toFixed(1)}},
+            }
+          }
+        });
+      },[spot,strike,rate,vol,maturity,strat]);
+
+      const descriptions={
+        bull_call_spread:'Buy lower strike call, sell higher strike call — limited risk bullish bet',
+        bear_put_spread:'Buy higher strike put, sell lower strike put — limited risk bearish bet',
+        straddle:'Buy call + put at same strike — profit from large moves in either direction',
+        strangle:'Buy OTM call + OTM put — cheaper than straddle, needs bigger move',
+        iron_condor:'Sell near-ATM strangle + buy OTM wings — profit from low volatility',
+        butterfly:'Buy ITM + OTM calls, sell 2x ATM calls — profit from staying near strike',
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Strategy P&L Builder</span><div className="sdot live"/></div>
+          <div style={{display:'flex',gap:'0.3rem',flexWrap:'wrap',margin:'0.4rem 0'}}>
+            {[['bull_call_spread','BULL CALL'],['bear_put_spread','BEAR PUT'],['straddle','STRADDLE'],['strangle','STRANGLE'],['iron_condor','IRON CONDOR'],['butterfly','BUTTERFLY']].map(([k,l])=>(
+              <button key={k} className={'method-btn'+(strat===k?' active':'')} style={{fontSize:'0.48rem',padding:'0.2rem 0.45rem'}} onClick={()=>setStrat(k)}>{l}</button>
+            ))}
+          </div>
+          <div style={{height:'200px',position:'relative'}}>
+            <canvas ref={canvasRef}/>
+          </div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.45rem',color:'var(--muted)',marginTop:'0.3rem'}}>
+            {descriptions[strat]}
+          </div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
        REGION SELECTOR
     ═══════════════════════════════════════════════════ */
     function RegionSelector({onSelect}){
@@ -1612,6 +1813,10 @@
               <OptionChain params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── CONVERGENCE ANALYSIS ──</div>
               <ConvergencePanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── GREEKS SENSITIVITY ──</div>
+              <GreeksSurface params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── STRATEGY BUILDER ──</div>
+              <StrategyBuilder params={params} currency={cur}/>
             </>
           )}
         </>
