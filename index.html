@@ -342,6 +342,55 @@
     .risk-bars { display:flex; gap:3px; margin-top:0.15rem; }
     .risk-seg   { flex:1; height:5px; border-radius:2px; transition:background 0.4s; }
     .section-label { text-align:center; font-family:'JetBrains Mono',monospace; font-size:0.55rem; letter-spacing:0.35em; color:var(--muted); pointer-events:none; }
+
+    /* ── Stock Selector ──────────────────────────────── */
+    .stock-picker { display:flex; flex-direction:column; gap:0.5rem; }
+    .stock-select {
+      width:100%; padding:0.52rem 0.7rem;
+      background:rgba(255,255,255,0.04); border:1px solid var(--border);
+      border-radius:10px; color:var(--text);
+      font-family:'JetBrains Mono',monospace; font-size:0.65rem;
+      appearance:none; -webkit-appearance:none;
+      cursor:pointer; outline:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2394a3b8'/%3E%3C/svg%3E");
+      background-repeat:no-repeat; background-position:right 0.65rem center;
+      transition:border-color 0.2s;
+    }
+    .stock-select:hover,.stock-select:focus { border-color:var(--accent); }
+    .stock-select option { background:#0a0f1e; color:#e2e8f0; }
+    .stock-info {
+      display:flex; flex-wrap:wrap; gap:0.35rem; align-items:center;
+      padding:0.45rem 0.6rem; border-radius:10px;
+      background:rgba(255,255,255,0.03); border:1px solid var(--border);
+    }
+    .stock-ticker {
+      font-family:'JetBrains Mono',monospace; font-size:0.72rem;
+      font-weight:700; color:var(--accent);
+    }
+    .stock-name { font-size:0.58rem; color:var(--muted); }
+    .stock-tag {
+      font-family:'JetBrains Mono',monospace; font-size:0.5rem;
+      padding:0.12rem 0.4rem; border-radius:100px;
+      background:rgba(255,255,255,0.05); color:var(--muted);
+      border:1px solid rgba(255,255,255,0.06);
+    }
+
+    /* ── Method Toggle ───────────────────────────────── */
+    .method-row { display:flex; gap:0.35rem; }
+    .method-btn {
+      flex:1; padding:0.28rem 0.4rem;
+      background:transparent; border:1px solid var(--border);
+      border-radius:8px; color:var(--muted);
+      font-family:'JetBrains Mono',monospace; font-size:0.48rem;
+      letter-spacing:0.12em; cursor:pointer;
+      transition:all 0.2s; text-transform:uppercase;
+    }
+    .method-btn.active { background:rgba(0,255,136,0.08); border-color:rgba(0,255,136,0.3); color:var(--accent); }
+
+    /* ── BS Comparison row ───────────────────────────── */
+    .bs-row { display:flex; justify-content:space-between; align-items:center; padding:0.25rem 0; }
+    .bs-label { font-family:'JetBrains Mono',monospace; font-size:0.54rem; color:var(--muted); letter-spacing:0.15em; }
+    .bs-val { font-family:'JetBrains Mono',monospace; font-size:0.62rem; font-weight:500; }
   </style>
 </head>
 <body>
@@ -432,6 +481,60 @@
     };
 
     /* ═══════════════════════════════════════════════════
+       STOCKS DATA PER REGION
+    ═══════════════════════════════════════════════════ */
+    const STOCKS = {
+      usa: [
+        {t:'AAPL',  n:'Apple Inc',        p:189, v:0.24, s:'Technology'},
+        {t:'MSFT',  n:'Microsoft Corp',   p:425, v:0.22, s:'Technology'},
+        {t:'GOOGL', n:'Alphabet Inc',     p:157, v:0.26, s:'Technology'},
+        {t:'AMZN',  n:'Amazon.com',       p:186, v:0.30, s:'Consumer'},
+        {t:'NVDA',  n:'NVIDIA Corp',      p:880, v:0.48, s:'Semiconductor'},
+        {t:'TSLA',  n:'Tesla Inc',        p:175, v:0.55, s:'Automotive'},
+        {t:'META',  n:'Meta Platforms',   p:505, v:0.34, s:'Technology'},
+        {t:'JPM',   n:'JPMorgan Chase',   p:198, v:0.20, s:'Banking'},
+        {t:'V',     n:'Visa Inc',         p:282, v:0.19, s:'Finance'},
+        {t:'SPY',   n:'S&P 500 ETF',     p:520, v:0.14, s:'Index ETF'},
+      ],
+      india: [
+        {t:'RELIANCE', n:'Reliance Industries', p:2950, v:0.22, s:'Conglomerate'},
+        {t:'TCS',      n:'Tata Consultancy',    p:3850, v:0.20, s:'IT Services'},
+        {t:'INFY',     n:'Infosys Ltd',         p:1520, v:0.25, s:'IT Services'},
+        {t:'HDFCBANK', n:'HDFC Bank',           p:1640, v:0.18, s:'Banking'},
+        {t:'ICICIBANK',n:'ICICI Bank',          p:1100, v:0.22, s:'Banking'},
+        {t:'BHARTIARTL',n:'Bharti Airtel',      p:1550, v:0.22, s:'Telecom'},
+        {t:'SBIN',     n:'State Bank of India', p:780,  v:0.26, s:'Banking'},
+        {t:'ITC',      n:'ITC Ltd',             p:440,  v:0.18, s:'FMCG'},
+        {t:'TATAMOTORS',n:'Tata Motors',        p:980,  v:0.35, s:'Automotive'},
+        {t:'NIFTY50',  n:'Nifty 50 Index',      p:22500,v:0.14, s:'Index'},
+      ],
+      europe: [
+        {t:'SAP',     n:'SAP SE',           p:185, v:0.24, s:'Technology'},
+        {t:'ASML',    n:'ASML Holding',     p:900, v:0.32, s:'Semiconductor'},
+        {t:'LVMH',    n:'LVMH Moet',        p:780, v:0.25, s:'Luxury'},
+        {t:'NOVO',    n:'Novo Nordisk',     p:850, v:0.30, s:'Pharma'},
+        {t:'SIEMENS', n:'Siemens AG',       p:180, v:0.22, s:'Industrial'},
+        {t:'TTE',     n:'TotalEnergies',    p:62,  v:0.22, s:'Energy'},
+        {t:'SHELL',   n:'Shell PLC',        p:32,  v:0.20, s:'Energy'},
+        {t:'BMW',     n:'BMW Group',        p:105, v:0.26, s:'Automotive'},
+        {t:'AIR',     n:'Airbus SE',        p:155, v:0.24, s:'Aerospace'},
+        {t:'SX5E',    n:'Euro Stoxx 50',    p:5050,v:0.15, s:'Index'},
+      ],
+      worldwide: [
+        {t:'MSCIW',   n:'MSCI World ETF',   p:108, v:0.16, s:'Global Index'},
+        {t:'SPY',     n:'S&P 500 ETF',     p:520, v:0.14, s:'US Index'},
+        {t:'EEM',     n:'Emerging Mkts ETF',p:42,  v:0.22, s:'EM Index'},
+        {t:'NKY',     n:'Nikkei 225',       p:39500,v:0.18,s:'Japan Index'},
+        {t:'HSI',     n:'Hang Seng Index',  p:16800,v:0.22,s:'HK Index'},
+        {t:'UKX',     n:'FTSE 100',         p:7700, v:0.14,s:'UK Index'},
+        {t:'TSM',     n:'TSMC',             p:150, v:0.30, s:'Semiconductor'},
+        {t:'BABA',    n:'Alibaba Group',    p:73,  v:0.40, s:'Technology'},
+        {t:'SAMSUNG', n:'Samsung Elec.',    p:72,  v:0.28, s:'Technology'},
+        {t:'TOYOTA',  n:'Toyota Motor',     p:190, v:0.22, s:'Automotive'},
+      ],
+    };
+
+    /* ═══════════════════════════════════════════════════
        MATH
     ═══════════════════════════════════════════════════ */
     function randn() {
@@ -475,6 +578,36 @@
       const d2=d1-sigma*sq;
       const Nd1=normalCDF(d1),Nd2=normalCDF(d2),phi=normalPDF(d1),df=Math.exp(-r*T);
       return{callDelta:Nd1,putDelta:Nd1-1,gamma:phi/(S*sigma*sq),vega:S*phi*sq/100,callTheta:(-(S*phi*sigma)/(2*sq)-r*K*df*Nd2)/365,putTheta:(-(S*phi*sigma)/(2*sq)+r*K*df*(1-Nd2))/365};
+    }
+
+    // Black-Scholes closed-form price (analytical benchmark)
+    function bsPrice(S,K,r,sigma,T,type){
+      if(T<=0||sigma<=0) return 0;
+      const sq=Math.sqrt(T);
+      const d1=(Math.log(S/K)+(r+0.5*sigma*sigma)*T)/(sigma*sq);
+      const d2=d1-sigma*sq;
+      if(type==='call') return S*normalCDF(d1)-K*Math.exp(-r*T)*normalCDF(d2);
+      else return K*Math.exp(-r*T)*normalCDF(-d2)-S*normalCDF(-d1);
+    }
+
+    // Antithetic variates MC — halves variance for free
+    function mcPriceAntithetic(S,K,r,sigma,T,N,type){
+      const drift=(r-0.5*sigma*sigma)*T, diff=sigma*Math.sqrt(T);
+      const half=Math.floor(N/2);
+      let sum=0,sumSq=0;
+      for(let i=0;i<half;i++){
+        const z=randn();
+        const ST1=S*Math.exp(drift+diff*z);
+        const ST2=S*Math.exp(drift+diff*(-z));
+        const p1=type==='call'?Math.max(ST1-K,0):Math.max(K-ST1,0);
+        const p2=type==='call'?Math.max(ST2-K,0):Math.max(K-ST2,0);
+        const avg=(p1+p2)/2;
+        sum+=avg; sumSq+=avg*avg;
+      }
+      const df=Math.exp(-r*T), mu=sum/half;
+      const v2=Math.max(sumSq/half-mu*mu,0);
+      const se=df*Math.sqrt(v2/half), p=df*mu;
+      return{price:p, se, ci:[p-1.96*se, p+1.96*se]};
     }
 
     /* ═══════════════════════════════════════════════════
@@ -826,9 +959,26 @@
     ═══════════════════════════════════════════════════ */
     function PricingApp({region, onChangeRegion, scene3d}){
       const cur=region.currency;
+      const stocks=STOCKS[region.id]||[];
+      const[selStock,setSelStock]=useState(null);
+      const[method,setMethod]=useState('standard'); // standard | antithetic
       const[params,setParams]=useState({spot:region.spot,strike:region.spot,rate:region.rate,vol:region.vol,maturity:1.0,n:50000});
       const[res,setRes]=useState(null);
       const[busy,setBusy]=useState(false);
+
+      // Dynamic slider config based on current spot
+      const sp=params.spot;
+      const sliderStep=sp>5000?50:sp>500?5:sp>50?1:0.5;
+      const sliderMax=Math.max(500,Math.round(sp*2/100)*100);
+      const sliderMin=Math.max(1,Math.round(sp*0.2));
+
+      const handleStockChange=(ticker)=>{
+        if(!ticker){setSelStock(null);return;}
+        const stk=stocks.find(s=>s.t===ticker);
+        if(!stk) return;
+        setSelStock(stk);
+        setParams(p=>({...p,spot:stk.p,strike:stk.p,vol:stk.v,rate:region.rate}));
+      };
 
       useEffect(()=>{
         gsap.fromTo('.header',      {y:-44,opacity:0},{y:0,opacity:1,duration:1.0,ease:'power3.out',delay:0.05});
@@ -842,17 +992,20 @@
       const runSim=useCallback((p)=>{
         setBusy(true);
         setTimeout(()=>{
-          const call=mcPrice(p.spot,p.strike,p.rate,p.vol,p.maturity,p.n,'call');
-          const put =mcPrice(p.spot,p.strike,p.rate,p.vol,p.maturity,p.n,'put');
+          const priceFn=method==='antithetic'?mcPriceAntithetic:mcPrice;
+          const call=priceFn(p.spot,p.strike,p.rate,p.vol,p.maturity,p.n,'call');
+          const put =priceFn(p.spot,p.strike,p.rate,p.vol,p.maturity,p.n,'put');
+          const bsCall=bsPrice(p.spot,p.strike,p.rate,p.vol,p.maturity,'call');
+          const bsPut =bsPrice(p.spot,p.strike,p.rate,p.vol,p.maturity,'put');
           const df=Math.exp(-p.rate*p.maturity),lhs=call.price-put.price,rhs=p.spot-p.strike*df;
-          setRes({call,put,lhs,rhs,err:Math.abs(lhs-rhs)});
+          setRes({call,put,lhs,rhs,err:Math.abs(lhs-rhs),bsCall,bsPut,method});
           setBusy(false);
           scene3d?.buildPaths(p.rate,p.vol,p.maturity);
           gsap.fromTo('.opt-card',      {y:10,opacity:0},{y:0,opacity:1,stagger:0.07,duration:0.5,ease:'back.out(1.5)'});
           gsap.fromTo('.parity,.sim-info',{y:8,opacity:0},{y:0,opacity:1,stagger:0.06,duration:0.45,ease:'power2.out',delay:0.15});
           gsap.fromTo('.sug-card',      {y:20,opacity:0},{y:0,opacity:1,stagger:0.07,duration:0.55,ease:'back.out(1.4)',delay:0.2});
         },30);
-      },[scene3d]);
+      },[scene3d,method]);
 
       const set=(k,v)=>setParams(p=>({...p,[k]:v}));
       const handleRun=()=>{gsap.to('.run-btn',{scale:0.95,duration:0.09,yoyo:true,repeat:1});runSim(params);};
@@ -869,9 +1022,10 @@
             <p className="subtitle">Options Pricing via Geometric Brownian Motion</p>
             <div className="header-tags">
               <span>{region.flag} {region.name}</span><span className="tag-sep">·</span>
-              <span>{region.index}</span><span className="tag-sep">·</span>
+              {selStock?<><span style={{color:region.color,fontWeight:600}}>{selStock.t}</span><span className="tag-sep">·</span><span>{cur}{selStock.p.toLocaleString()}</span><span className="tag-sep">·</span></>
+              :<><span>{region.index}</span><span className="tag-sep">·</span></>}
               <span>{region.currencyName} ({cur})</span><span className="tag-sep">·</span>
-              <span>Rate {(region.rate*100).toFixed(1)}%</span>
+              <span>{method==='antithetic'?'Antithetic MC':'Standard MC'}</span>
             </div>
             <div style={{display:'flex',justifyContent:'center'}}>
               <div className="region-pill" style={{'--rc-color':region.color}} onClick={onChangeRegion}>
@@ -888,14 +1042,38 @@
                 <span className="card-tag">Market Parameters</span>
                 <div className="sdot"/>
               </div>
+
+              {/* Stock Selector */}
+              <div className="stock-picker">
+                <select className="stock-select" value={selStock?.t||''} onChange={e=>handleStockChange(e.target.value)}>
+                  <option value="">-- Custom Mode --</option>
+                  {stocks.map(s=><option key={s.t} value={s.t}>{s.t} — {cur}{s.p.toLocaleString()} ({s.s})</option>)}
+                </select>
+                {selStock&&(
+                  <div className="stock-info">
+                    <span className="stock-ticker">{selStock.t}</span>
+                    <span className="stock-name">{selStock.n}</span>
+                    <span className="stock-tag">{selStock.s}</span>
+                    <span className="stock-tag">Vol {(selStock.v*100).toFixed(0)}%</span>
+                  </div>
+                )}
+              </div>
+
               <div className="slider-list">
-                <Slider label="Spot Price"       value={params.spot}     min={20}    max={500}    step={1}     fmt={v=>`${cur}${v}`}              onChange={v=>set('spot',v)}/>
-                <Slider label="Strike Price"     value={params.strike}   min={20}    max={500}    step={1}     fmt={v=>`${cur}${v}`}              onChange={v=>set('strike',v)}/>
+                <Slider label="Spot Price"       value={params.spot}     min={sliderMin} max={sliderMax} step={sliderStep} fmt={v=>`${cur}${v.toLocaleString()}`} onChange={v=>set('spot',v)}/>
+                <Slider label="Strike Price"     value={params.strike}   min={sliderMin} max={sliderMax} step={sliderStep} fmt={v=>`${cur}${v.toLocaleString()}`} onChange={v=>set('strike',v)}/>
                 <Slider label="Risk-free Rate"   value={params.rate}     min={0}     max={0.20}   step={0.001} fmt={v=>`${(v*100).toFixed(1)}%`} onChange={v=>set('rate',v)}/>
                 <Slider label="Volatility σ"     value={params.vol}      min={0.05}  max={0.85}   step={0.01}  fmt={v=>`${(v*100).toFixed(0)}%`} onChange={v=>set('vol',v)}/>
                 <Slider label="Time to Maturity" value={params.maturity} min={0.1}   max={3.0}    step={0.1}   fmt={v=>`${v.toFixed(1)} yr`}      onChange={v=>set('maturity',v)}/>
                 <Slider label="Simulations"      value={params.n}        min={1000}  max={100000} step={1000}  fmt={v=>`${(v/1000).toFixed(0)}K`} onChange={v=>set('n',v)}/>
               </div>
+
+              {/* Method Toggle */}
+              <div className="method-row">
+                <button className={`method-btn${method==='standard'?' active':''}`} onClick={()=>setMethod('standard')}>STANDARD MC</button>
+                <button className={`method-btn${method==='antithetic'?' active':''}`} onClick={()=>setMethod('antithetic')}>ANTITHETIC VAR</button>
+              </div>
+
               <button className="run-btn" onClick={handleRun} disabled={busy}>
                 {busy?<><span className="spin"/>COMPUTING…</>:<>▶ &nbsp;RUN SIMULATION</>}
               </button>
@@ -928,7 +1106,29 @@
                     <div className="p-row"><span className="p-key">S − K · e⁻ʳᵀ</span><span className="p-val"><AnimNum value={res.rhs} dec={4} pre={cur}/></span></div>
                     <div className="p-row err"><span className="p-key">Δ error</span><span className={`p-val ${res.err<0.15?'ok':'warn'}`}><AnimNum value={res.err} dec={6} pre={cur}/></span></div>
                   </div>
-                  <div className="sim-info"><span>Monte Carlo paths:</span><span className="sim-n">{params.n.toLocaleString()}</span></div>
+                  {/* BS Analytical Comparison */}
+                  <div className="parity">
+                    <div className="parity-title">BLACK-SCHOLES VALIDATION</div>
+                    <div className="bs-row">
+                      <span className="bs-label">BS Call</span>
+                      <span className="bs-val" style={{color:'#00ff88'}}><AnimNum value={res.bsCall} dec={4} pre={cur}/></span>
+                    </div>
+                    <div className="bs-row">
+                      <span className="bs-label">BS Put</span>
+                      <span className="bs-val" style={{color:'#f97316'}}><AnimNum value={res.bsPut} dec={4} pre={cur}/></span>
+                    </div>
+                    <div className="bs-row" style={{borderTop:'1px solid rgba(255,255,255,0.07)',marginTop:'0.2rem',paddingTop:'0.3rem'}}>
+                      <span className="bs-label">MC vs BS Diff</span>
+                      <span className="bs-val" style={{color:Math.abs(res.call.price-res.bsCall)<0.15?'#00ff88':'#f97316'}}>
+                        <AnimNum value={Math.abs(res.call.price-res.bsCall)} dec={5} pre={cur}/>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="sim-info">
+                    <span>{res.method==='antithetic'?'Antithetic MC':'Standard MC'}:</span>
+                    <span className="sim-n">{params.n.toLocaleString()} paths</span>
+                  </div>
                 </>
               ):<div className="empty"><div className="dots"><span/><span/><span/></div></div>}
             </div>
