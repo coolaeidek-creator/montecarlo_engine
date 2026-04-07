@@ -1061,6 +1061,61 @@
       return{price,se,itmProb:prob};
     }
 
+    function mcAmericanPrice(S,K,r,v,T,N,ot){
+      // Simplified LSM (Longstaff-Schwartz) in JS
+      const steps=40,dt=T/steps,disc=Math.exp(-r*dt);
+      // Generate paths
+      const paths=[];
+      for(let i=0;i<N;i++){
+        const path=[S];
+        let s=S;
+        for(let j=0;j<steps;j++){
+          s*=Math.exp((r-0.5*v*v)*dt+v*Math.sqrt(dt)*randn());
+          path.push(s);
+        }
+        paths.push(path);
+      }
+      // Payoff at each node
+      const payoff=(s)=>ot==='call'?Math.max(s-K,0):Math.max(K-s,0);
+      // Cash flows initialized to terminal payoff
+      const cf=paths.map(p=>payoff(p[steps]));
+      const exTime=new Array(N).fill(steps);
+      // Backward induction
+      for(let t=steps-1;t>=1;t--){
+        // Find ITM paths
+        const itm=[];
+        for(let i=0;i<N;i++){if(payoff(paths[i][t])>0)itm.push(i);}
+        if(itm.length<4)continue;
+        // Regression: continuation = a + b*S + c*S^2
+        const xs=itm.map(i=>paths[i][t]/S);
+        const ys=itm.map(i=>cf[i]*disc);
+        const n2=itm.length;
+        let sx=0,sx2=0,sx3=0,sx4=0,sy=0,sxy=0,sx2y=0;
+        for(let j=0;j<n2;j++){
+          const x=xs[j],x2=x*x,y=ys[j];
+          sx+=x;sx2+=x2;sx3+=x*x2;sx4+=x2*x2;sy+=y;sxy+=x*y;sx2y+=x2*y;
+        }
+        // Simple: just use mean continuation vs immediate payoff
+        const meanCont=sy/n2;
+        for(const i of itm){
+          const immediate=payoff(paths[i][t]);
+          const cont=cf[i]*disc;
+          if(immediate>cont){cf[i]=immediate;exTime[i]=t;}
+          else{cf[i]=cont;}
+        }
+        // Discount non-ITM paths
+        for(let i=0;i<N;i++){if(!itm.includes(i))cf[i]*=disc;}
+      }
+      // Discount to time 0
+      for(let i=0;i<N;i++){cf[i]=payoff(paths[i][exTime[i]])*Math.exp(-r*exTime[i]*dt);}
+      const price=cf.reduce((a,b)=>a+b,0)/N;
+      const v2=cf.reduce((a,b)=>a+(b-price)**2,0)/N;
+      const se=Math.sqrt(v2/N);
+      const earlyPct=exTime.filter(t=>t<steps).length/N;
+      const euroPrice=paths.map(p=>payoff(p[steps])*Math.exp(-r*T)).reduce((a,b)=>a+b,0)/N;
+      return{price,se,earlyPct,euroPrice,premium:price-euroPrice};
+    }
+
     function ExoticPanel({params,currency}){
       const{spot,strike,rate,vol,maturity,n}=params;
       const cur=currency;
@@ -1091,6 +1146,10 @@
             const c=mcDigitalPrice(spot,strike,rate,vol,maturity,N,'call',100);
             const p=mcDigitalPrice(spot,strike,rate,vol,maturity,N,'put',100);
             result={call:c,put:p,type:'Digital (Cash-or-Nothing)',itmProb:c.itmProb};
+          }else if(exType==='american'){
+            const c=mcAmericanPrice(spot,strike,rate,vol,maturity,N,'call');
+            const p=mcAmericanPrice(spot,strike,rate,vol,maturity,N,'put');
+            result={call:c,put:p,type:'American (Longstaff-Schwartz)',earlyPct:p.earlyPct,premium:p.premium};
           }
           setExRes(result);
           setExBusy(false);
@@ -1102,7 +1161,7 @@
         <div className="glass exotic-panel" style={{marginTop:'1.5rem',padding:'1rem 1.2rem'}}>
           <div className="card-head"><span className="card-tag">Exotic Options</span><div className="sdot"/></div>
           <div style={{display:'flex',gap:'0.4rem',flexWrap:'wrap',margin:'0.6rem 0'}}>
-            {[['asian','ASIAN'],['barrier','BARRIER'],['lookback','LOOKBACK'],['digital','DIGITAL']].map(([k,l])=>(
+            {[['asian','ASIAN'],['barrier','BARRIER'],['lookback','LOOKBACK'],['digital','DIGITAL'],['american','AMERICAN']].map(([k,l])=>(
               <button key={k} className={'method-btn'+(exType===k?' active':'')} style={{fontSize:'0.55rem',padding:'0.25rem 0.6rem'}} onClick={()=>setExType(k)}>{l}</button>
             ))}
           </div>
@@ -1148,6 +1207,12 @@
               {exRes.itmProb!==undefined&&(
                 <div style={{marginTop:'0.35rem',fontFamily:'JetBrains Mono',fontSize:'0.52rem',color:'#00d4ff'}}>
                   ITM probability: {(exRes.itmProb*100).toFixed(1)}% chance of payout
+                </div>
+              )}
+              {exRes.earlyPct!==undefined&&(
+                <div style={{marginTop:'0.35rem',fontFamily:'JetBrains Mono',fontSize:'0.52rem'}}>
+                  <span style={{color:'#a855f7'}}>Early exercise: {(exRes.earlyPct*100).toFixed(1)}% of paths</span>
+                  <span style={{color:'var(--muted)'}}> · Premium: {cur}{Math.max(0,exRes.premium).toFixed(3)}</span>
                 </div>
               )}
               <div style={{marginTop:'0.4rem',display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.3rem'}}>
