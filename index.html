@@ -1659,6 +1659,146 @@
     }
 
     /* ═══════════════════════════════════════════════════
+       STRESS TEST PANEL
+    ═══════════════════════════════════════════════════ */
+    function StressTestPanel({params,currency}){
+      const{spot,strike,rate,vol,maturity}=params;
+      const cur=currency;
+      const currentPrice=bsPrice(spot,strike,rate,vol,maturity,'call');
+
+      const scenarios=[
+        {name:'Black Monday (1987)',spotShock:-0.225,volShock:0.30,emoji:'💥'},
+        {name:'GFC (2008)',spotShock:-0.15,volShock:0.25,emoji:'🏦'},
+        {name:'COVID Crash (2020)',spotShock:-0.12,volShock:0.35,emoji:'🦠'},
+        {name:'Flash Crash (2010)',spotShock:-0.09,volShock:0.20,emoji:'⚡'},
+        {name:'Dot-Com (2000)',spotShock:-0.10,volShock:0.15,emoji:'💻'},
+        {name:'Bull Rally (+10%)',spotShock:0.10,volShock:-0.05,emoji:'📈'},
+        {name:'Melt-Up (+20%)',spotShock:0.20,volShock:-0.08,emoji:'🚀'},
+        {name:'Vol Spike (flat)',spotShock:0.0,volShock:0.20,emoji:'🌊'},
+        {name:'Vol Crush (flat)',spotShock:0.0,volShock:-0.10,emoji:'🔇'},
+      ];
+
+      const results=scenarios.map(sc=>{
+        const newSpot=spot*(1+sc.spotShock);
+        const newVol=Math.max(0.01,vol+sc.volShock);
+        const newPrice=bsPrice(newSpot,strike,rate,newVol,maturity,'call');
+        const pnl=newPrice-currentPrice;
+        const pnlPct=currentPrice>0?(pnl/currentPrice)*100:0;
+        return{...sc,newPrice,pnl,pnlPct};
+      });
+
+      return(
+        <div className="glass" style={{marginTop:'1rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Stress Test Scenarios</span><div className="sdot live"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--muted)',margin:'0.3rem 0 0.5rem'}}>
+            How your ATM call ({cur}{currentPrice.toFixed(2)}) performs under historical-style shocks
+          </div>
+          <div style={{overflowX:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontFamily:'JetBrains Mono',fontSize:'0.48rem'}}>
+              <thead>
+                <tr style={{borderBottom:'1px solid var(--border)'}}>
+                  <th style={{textAlign:'left',padding:'0.3rem',color:'var(--muted)'}}>SCENARIO</th>
+                  <th style={{textAlign:'right',padding:'0.3rem',color:'var(--muted)'}}>SPOT</th>
+                  <th style={{textAlign:'right',padding:'0.3rem',color:'var(--muted)'}}>VOL</th>
+                  <th style={{textAlign:'right',padding:'0.3rem',color:'var(--muted)'}}>NEW PRICE</th>
+                  <th style={{textAlign:'right',padding:'0.3rem',color:'var(--muted)'}}>P&L</th>
+                  <th style={{textAlign:'right',padding:'0.3rem',color:'var(--muted)'}}>P&L %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.map(r=>(
+                  <tr key={r.name} style={{borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
+                    <td style={{padding:'0.3rem',color:'var(--text)'}}>{r.emoji} {r.name}</td>
+                    <td style={{padding:'0.3rem',textAlign:'right',color:r.spotShock<0?'#f97316':r.spotShock>0?'#00ff88':'var(--muted)'}}>
+                      {r.spotShock>0?'+':''}{(r.spotShock*100).toFixed(1)}%
+                    </td>
+                    <td style={{padding:'0.3rem',textAlign:'right',color:r.volShock>0?'#ec4899':r.volShock<0?'#00d4ff':'var(--muted)'}}>
+                      {r.volShock>0?'+':''}{(r.volShock*100).toFixed(0)}%
+                    </td>
+                    <td style={{padding:'0.3rem',textAlign:'right'}}>{cur}{r.newPrice.toFixed(2)}</td>
+                    <td style={{padding:'0.3rem',textAlign:'right',color:r.pnl>=0?'#00ff88':'#f97316',fontWeight:600}}>
+                      {r.pnl>=0?'+':''}{cur}{r.pnl.toFixed(2)}
+                    </td>
+                    <td style={{padding:'0.3rem',textAlign:'right',color:r.pnlPct>=0?'#00ff88':'#f97316'}}>
+                      {r.pnlPct>=0?'+':''}{r.pnlPct.toFixed(1)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
+       P&L SCENARIO MATRIX
+    ═══════════════════════════════════════════════════ */
+    function PnlMatrix({params,currency}){
+      const{spot,strike,rate,vol,maturity}=params;
+      const cur=currency;
+      const currentPrice=bsPrice(spot,strike,rate,vol,maturity,'call');
+      const spotShifts=[-20,-15,-10,-5,0,5,10,15,20];
+      const volShifts=[-10,-5,0,5,10];
+
+      const grid=spotShifts.map(ds=>{
+        return volShifts.map(dv=>{
+          const newSpot=spot*(1+ds/100);
+          const newVol=Math.max(0.01,vol+dv/100);
+          const newPrice=bsPrice(newSpot,strike,rate,newVol,maturity,'call');
+          return newPrice-currentPrice;
+        });
+      });
+
+      const flat=grid.flat();
+      const maxPnl=Math.max(...flat.map(Math.abs));
+
+      const pnlColor=(v)=>{
+        if(maxPnl===0)return'var(--muted)';
+        const intensity=Math.min(1,Math.abs(v)/maxPnl);
+        if(v>=0) return `rgba(0,255,136,${0.15+intensity*0.6})`;
+        return `rgba(249,115,22,${0.15+intensity*0.6})`;
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1rem',padding:'1rem 1.2rem',overflowX:'auto'}}>
+          <div className="card-head"><span className="card-tag">P&L Scenario Matrix</span><div className="sdot live"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.45rem',color:'var(--muted)',margin:'0.3rem 0 0.4rem'}}>
+            Call P&L under combined spot and vol shifts (current: {cur}{currentPrice.toFixed(2)})
+          </div>
+          <table style={{borderCollapse:'collapse',width:'100%',fontFamily:'JetBrains Mono',fontSize:'0.45rem'}}>
+            <thead>
+              <tr>
+                <th style={{padding:'0.25rem',color:'var(--muted)',textAlign:'left',borderBottom:'1px solid var(--border)'}}>Spot↓ Vol→</th>
+                {volShifts.map(dv=>(
+                  <th key={dv} style={{padding:'0.25rem',textAlign:'center',borderBottom:'1px solid var(--border)',
+                    color:dv===0?'var(--accent)':'var(--muted)'}}>{dv>0?'+':''}{dv}%</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {grid.map((row,i)=>(
+                <tr key={i}>
+                  <td style={{padding:'0.25rem',fontWeight:spotShifts[i]===0?600:400,
+                    color:spotShifts[i]===0?'var(--accent)':'var(--text)',borderRight:'1px solid var(--border)'}}>
+                    {spotShifts[i]>0?'+':''}{spotShifts[i]}%
+                  </td>
+                  {row.map((v,j)=>(
+                    <td key={j} style={{padding:'0.2rem 0.3rem',textAlign:'center',
+                      background:pnlColor(v),color:v>=0?'#00ff88':'#f97316',
+                      border:'1px solid rgba(255,255,255,0.02)',fontWeight:spotShifts[i]===0&&volShifts[j]===0?700:400}}>
+                      {v>=0?'+':''}{v.toFixed(1)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
        REGION SELECTOR
     ═══════════════════════════════════════════════════ */
     function RegionSelector({onSelect}){
@@ -1895,6 +2035,10 @@
               <StrategyBuilder params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── VARIANCE REDUCTION COMPARISON ──</div>
               <VarReductionPanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── STRESS TESTING ──</div>
+              <StressTestPanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── P&L SCENARIO MATRIX ──</div>
+              <PnlMatrix params={params} currency={cur}/>
             </>
           )}
         </>

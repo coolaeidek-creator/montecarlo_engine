@@ -34,6 +34,7 @@ from engine.exotic import price_asian, price_barrier, price_lookback, price_digi
 from engine.risk import compute_var
 from engine.implied_vol import implied_volatility
 from engine.vol_surface import generate_vol_surface, generate_svi_surface
+from engine.scenarios import spot_sensitivity, pnl_matrix, stress_test, time_decay_projection
 from engine.stocks import REGIONS, get_stock, get_region
 
 
@@ -245,3 +246,49 @@ def get_vol_surface(req: VolSurfaceRequest):
         "spot": data["spot"],
         "model": req.model,
     }
+
+
+# ─── Scenario Analysis ───────────────────────────────────────────────────────
+
+@app.post("/api/scenarios/sensitivity")
+def get_sensitivity(req: GreeksRequest):
+    """Spot sensitivity — price and Greeks across spot range."""
+    market = MarketEnvironment(
+        spot=req.spot, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+    )
+    contract = OptionContract(strike=req.strike, option_type=req.option_type)
+    return spot_sensitivity(market, contract)
+
+
+@app.post("/api/scenarios/pnl-matrix")
+def get_pnl_matrix(req: GreeksRequest):
+    """P&L matrix across spot and vol shifts."""
+    market = MarketEnvironment(
+        spot=req.spot, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+    )
+    contract = OptionContract(strike=req.strike, option_type=req.option_type)
+    return pnl_matrix(market, contract)
+
+
+@app.post("/api/scenarios/stress-test")
+def get_stress_test(req: GreeksRequest):
+    """Run historical stress scenarios."""
+    market = MarketEnvironment(
+        spot=req.spot, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+    )
+    contract = OptionContract(strike=req.strike, option_type=req.option_type)
+    return stress_test(market, contract)
+
+
+@app.post("/api/scenarios/time-decay")
+def get_time_decay(req: GreeksRequest):
+    """Project theta decay over time."""
+    market = MarketEnvironment(
+        spot=req.spot, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+    )
+    contract = OptionContract(strike=req.strike, option_type=req.option_type)
+    return time_decay_projection(market, contract)
