@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .schemas import (
     PriceRequest, ExoticRequest, RiskRequest,
     IVRequest, GreeksRequest, VolSurfaceRequest, StockPriceRequest,
+    JumpDiffusionRequest, MCGreeksRequest, AmericanRequest,
 )
 
 import sys
@@ -35,6 +36,9 @@ from engine.risk import compute_var
 from engine.implied_vol import implied_volatility
 from engine.vol_surface import generate_vol_surface, generate_svi_surface
 from engine.scenarios import spot_sensitivity, pnl_matrix, stress_test, time_decay_projection
+from engine.jump_diffusion import simulate_jump_diffusion
+from engine.mc_greeks import mc_greeks
+from engine.american import price_american
 from engine.stocks import REGIONS, get_stock, get_region
 
 
@@ -57,9 +61,10 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "engine": "monte-carlo-v2", "features": [
+    return {"status": "ok", "engine": "monte-carlo-v2.1", "features": [
         "vanilla_mc", "antithetic_variates", "black_scholes",
-        "greeks", "exotic_options", "risk_metrics",
+        "greeks", "mc_greeks", "exotic_options", "american_lsm",
+        "jump_diffusion", "risk_metrics",
         "implied_volatility", "vol_surface", "40_stocks_4_regions",
     ]}
 
@@ -292,3 +297,52 @@ def get_time_decay(req: GreeksRequest):
     )
     contract = OptionContract(strike=req.strike, option_type=req.option_type)
     return time_decay_projection(market, contract)
+
+
+# ─── Jump-Diffusion ─────────────────────────────────────────────────────────
+
+@app.post("/api/jump-diffusion")
+def price_jump_diffusion(req: JumpDiffusionRequest):
+    """Price European option under Merton Jump-Diffusion model."""
+    market = MarketEnvironment(
+        spot=req.spot, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+    )
+    contract = OptionContract(strike=req.strike, option_type=req.option_type)
+    result = simulate_jump_diffusion(
+        market, contract, req.n_simulations,
+        req.jump_intensity, req.jump_mean, req.jump_vol,
+    )
+    result["confidence_interval"] = list(result["confidence_interval"])
+    return result
+
+
+# ─── MC Greeks ───────────────────────────────────────────────────────────────
+
+@app.post("/api/mc-greeks")
+def get_mc_greeks(req: MCGreeksRequest):
+    """Compute option Greeks via Monte Carlo finite differences."""
+    market = MarketEnvironment(
+        spot=req.spot, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+    )
+    contract = OptionContract(strike=req.strike, option_type=req.option_type)
+    result = mc_greeks(market, contract, req.n_simulations, req.method)
+    return result
+
+
+# ─── American Options ───────────────────────────────────────────────────────
+
+@app.post("/api/american")
+def price_american_option(req: AmericanRequest):
+    """Price American option via Longstaff-Schwartz LSM."""
+    market = MarketEnvironment(
+        spot=req.spot, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+    )
+    contract = OptionContract(strike=req.strike, option_type=req.option_type)
+    result = price_american(
+        market, contract, req.n_simulations, req.n_steps,
+    )
+    result["confidence_interval"] = list(result["confidence_interval"])
+    return result

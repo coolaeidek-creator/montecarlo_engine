@@ -89,3 +89,41 @@ class StockPriceRequest(BaseModel):
     option_type: Literal["call", "put"] = "call"
     method: Literal["standard", "antithetic"] = "antithetic"
     n_simulations: int = Field(50000, gt=0, le=1000000)
+
+
+class JumpDiffusionRequest(BaseModel):
+    """Request for Merton Jump-Diffusion pricing."""
+    spot: float = Field(..., gt=0)
+    strike: float = Field(..., gt=0)
+    rate: float
+    volatility: float = Field(..., gt=0)
+    maturity: float = Field(..., gt=0)
+    option_type: Literal["call", "put"] = "call"
+    n_simulations: int = Field(50000, gt=0, le=1000000)
+    jump_intensity: float = Field(1.0, ge=0, description="Avg jumps/year (λ)")
+    jump_mean: float = Field(-0.05, description="Mean log-jump size (μ_J)")
+    jump_vol: float = Field(0.10, gt=0, description="Jump volatility (σ_J)")
+
+
+class MCGreeksRequest(BaseModel):
+    """Request for Monte Carlo Greeks."""
+    spot: float = Field(..., gt=0)
+    strike: float = Field(..., gt=0)
+    rate: float
+    volatility: float = Field(..., gt=0)
+    maturity: float = Field(..., gt=0)
+    option_type: Literal["call", "put"] = "call"
+    n_simulations: int = Field(50000, gt=0, le=500000)
+    method: Literal["standard", "antithetic"] = "antithetic"
+
+
+class AmericanRequest(BaseModel):
+    """Request for American option pricing (LSM)."""
+    spot: float = Field(..., gt=0)
+    strike: float = Field(..., gt=0)
+    rate: float
+    volatility: float = Field(..., gt=0)
+    maturity: float = Field(..., gt=0)
+    option_type: Literal["call", "put"] = "put"
+    n_simulations: int = Field(50000, gt=0, le=500000)
+    n_steps: int = Field(100, gt=0, le=500)

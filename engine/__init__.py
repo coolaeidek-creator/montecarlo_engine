@@ -18,5 +18,8 @@ from .models import MarketEnvironment, OptionContract
 from .pricer import OptionPricer, price_option
 from .analytical import bs_price, bs_price_both
 from .greeks import compute_greeks, compute_greeks_both
+from .jump_diffusion import simulate_jump_diffusion
+from .mc_greeks import mc_greeks
+from .american import price_american
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
