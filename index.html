@@ -1583,6 +1583,82 @@
     }
 
     /* ═══════════════════════════════════════════════════
+       VARIANCE REDUCTION COMPARISON
+    ═══════════════════════════════════════════════════ */
+    function VarReductionPanel({params,currency}){
+      const{spot,strike,rate,vol,maturity}=params;
+      const cur=currency;
+      const[vrData,setVrData]=useState(null);
+      const[vrBusy,setVrBusy]=useState(false);
+
+      const runComparison=()=>{
+        setVrBusy(true);
+        setTimeout(()=>{
+          const N=50000;
+          const bsVal=bsPrice(spot,strike,rate,vol,maturity,'call');
+          const methods=[
+            {name:'Standard MC',fn:mcPrice,color:'#e2e8f0'},
+            {name:'Antithetic',fn:mcPriceAntithetic,color:'#00ff88'},
+            {name:'Control Variate',fn:mcPriceControlVariate,color:'#00d4ff'},
+          ];
+          const results=methods.map(m=>{
+            const r=m.fn(spot,strike,rate,vol,maturity,N,'call');
+            return{...m,price:r.price,se:r.se,error:Math.abs(r.price-bsVal),reduction:0};
+          });
+          const baseSE=results[0].se;
+          results.forEach(r=>{r.reduction=baseSE>0?(1-r.se/baseSE)*100:0;});
+          results.sort((a,b)=>a.se-b.se);
+          setVrData({results,bsVal,N});
+          setVrBusy(false);
+          gsap.fromTo('.vr-result',{y:12,opacity:0},{y:0,opacity:1,duration:0.5,ease:'back.out(1.4)'});
+        },30);
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Variance Reduction Comparison</span><div className="sdot"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--muted)',margin:'0.3rem 0 0.5rem'}}>
+            Compare all MC methods head-to-head: Standard vs Antithetic vs Control Variate (50K sims)
+          </div>
+          <button className="run-btn" style={{fontSize:'0.55rem',padding:'0.4rem 1rem'}} onClick={runComparison} disabled={vrBusy}>
+            {vrBusy?'RUNNING...':'RUN COMPARISON'}
+          </button>
+          {vrData&&(
+            <div className="vr-result" style={{marginTop:'0.6rem'}}>
+              <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--accent)',marginBottom:'0.4rem'}}>
+                BS BENCHMARK: {cur}{vrData.bsVal.toFixed(4)} · {vrData.N.toLocaleString()} simulations
+              </div>
+              <table style={{width:'100%',borderCollapse:'collapse',fontFamily:'JetBrains Mono',fontSize:'0.5rem'}}>
+                <thead>
+                  <tr style={{borderBottom:'1px solid var(--border)'}}>
+                    <th style={{textAlign:'left',padding:'0.3rem',color:'var(--muted)'}}>RANK</th>
+                    <th style={{textAlign:'left',padding:'0.3rem',color:'var(--muted)'}}>METHOD</th>
+                    <th style={{textAlign:'right',padding:'0.3rem',color:'var(--muted)'}}>PRICE</th>
+                    <th style={{textAlign:'right',padding:'0.3rem',color:'var(--muted)'}}>SE</th>
+                    <th style={{textAlign:'right',padding:'0.3rem',color:'var(--muted)'}}>|ERROR|</th>
+                    <th style={{textAlign:'right',padding:'0.3rem',color:'var(--muted)'}}>REDUCTION</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vrData.results.map((r,i)=>(
+                    <tr key={r.name} style={{borderBottom:'1px solid rgba(255,255,255,0.03)',background:i===0?'rgba(0,255,136,0.04)':'transparent'}}>
+                      <td style={{padding:'0.3rem',color:i===0?'#00ff88':'var(--text)'}}>{i===0?'BEST':'#'+(i+1)}</td>
+                      <td style={{padding:'0.3rem',color:r.color,fontWeight:i===0?600:400}}>{r.name}</td>
+                      <td style={{padding:'0.3rem',textAlign:'right'}}>{cur}{r.price.toFixed(4)}</td>
+                      <td style={{padding:'0.3rem',textAlign:'right',color:i===0?'#00ff88':'var(--text)'}}>{r.se.toFixed(5)}</td>
+                      <td style={{padding:'0.3rem',textAlign:'right'}}>{cur}{r.error.toFixed(4)}</td>
+                      <td style={{padding:'0.3rem',textAlign:'right',color:r.reduction>0?'#00ff88':'var(--muted)'}}>{r.reduction>0?'+':''}{r.reduction.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
        REGION SELECTOR
     ═══════════════════════════════════════════════════ */
     function RegionSelector({onSelect}){
@@ -1817,6 +1893,8 @@
               <GreeksSurface params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── STRATEGY BUILDER ──</div>
               <StrategyBuilder params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── VARIANCE REDUCTION COMPARISON ──</div>
+              <VarReductionPanel params={params} currency={cur}/>
             </>
           )}
         </>
