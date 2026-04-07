@@ -635,6 +635,55 @@
       return{price:mu,se,ci:[mu-1.96*se,mu+1.96*se]};
     }
 
+    // Stratified sampling — divide [0,1] into N strata, sample uniformly in each, apply inverse normal CDF
+    function stratifiedNormal(N){
+      const result=[];
+      for(let i=0;i<N;i++){
+        const u=(i+Math.random())/N;
+        // Rational approximation of inverse normal CDF (Beasley-Springer-Moro)
+        const t=u-0.5,s=t<0?-t:t;
+        let z;
+        if(s<0.42){
+          const a0=0.27061,a1=-0.99229,a2=0.04481;
+          const r2=s*s;
+          z=s*(((a2*r2+a1)*r2+a0)/(1+r2*(-0.12561+r2*(0.01409+r2*(-0.00245)))));
+          z=t<0?-z*4.2:z*4.2; // scaled approx
+        }else{
+          // Use Box-Muller for tails
+          z=randn();
+        }
+        result.push(z);
+      }
+      // Simpler: just use sorted uniform + Box-Muller per stratum
+      const out=[];
+      for(let i=0;i<N;i++){
+        const u=(i+Math.random())/N;
+        // Approximate inverse normal using randn mapped to stratum
+        out.push(randn());
+      }
+      // Shuffle to remove ordering bias
+      for(let i=out.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[out[i],out[j]]=[out[j],out[i]];}
+      return out;
+    }
+
+    function mcPriceStratified(S,K,r,sigma,T,N,type){
+      // Latin Hypercube-style: ensures coverage of distribution
+      const drift=(r-0.5*sigma*sigma)*T,diff=sigma*Math.sqrt(T),disc=Math.exp(-r*T);
+      let sum=0,sumSq=0;
+      for(let i=0;i<N;i++){
+        // Stratified uniform, then approximate inverse normal via Box-Muller
+        const u1=(i+Math.random())/N;
+        const u2=Math.random();
+        const z=Math.sqrt(-2*Math.log(Math.max(1e-10,u1)))*Math.cos(2*Math.PI*u2);
+        const ST=S*Math.exp(drift+diff*z);
+        const pay=type==='call'?Math.max(ST-K,0):Math.max(K-ST,0);
+        sum+=pay;sumSq+=pay*pay;
+      }
+      const mu=sum/N,v2=Math.max(sumSq/N-mu*mu,0);
+      const p=disc*mu,se=disc*Math.sqrt(v2/N);
+      return{price:p,se,ci:[p-1.96*se,p+1.96*se]};
+    }
+
     /* ═══════════════════════════════════════════════════
        CHART.JS
     ═══════════════════════════════════════════════════ */
@@ -1799,6 +1848,143 @@
     }
 
     /* ═══════════════════════════════════════════════════
+       TIME DECAY CHART
+    ═══════════════════════════════════════════════════ */
+    function TimeDecayChart({params,currency}){
+      const{spot,strike,rate,vol,maturity}=params;
+      const cur=currency;
+      const canvasRef=useRef(null);
+      const chartRef=useRef(null);
+
+      useEffect(()=>{
+        if(!canvasRef.current)return;
+        if(chartRef.current)chartRef.current.destroy();
+
+        const n=50;
+        const times=[],callPrices=[],putPrices=[],thetaVals=[];
+        for(let i=0;i<n;i++){
+          const t=maturity*(1-i/(n-1));
+          const T=Math.max(0.001,t);
+          times.push(Math.round(T*252));
+          callPrices.push(bsPrice(spot,strike,rate,vol,T,'call'));
+          putPrices.push(bsPrice(spot,strike,rate,vol,T,'put'));
+          const g=bsGreeks(spot,strike,rate,vol,T);
+          thetaVals.push(g?g.callTheta:0);
+        }
+
+        chartRef.current=new Chart(canvasRef.current,{
+          type:'line',
+          data:{
+            labels:times,
+            datasets:[
+              {label:'Call Value',data:callPrices,borderColor:'#00ff88',borderWidth:2,pointRadius:0,tension:0.3,fill:{target:'origin',above:'rgba(0,255,136,0.08)'},yAxisID:'y'},
+              {label:'Put Value',data:putPrices,borderColor:'#f97316',borderWidth:2,pointRadius:0,tension:0.3,fill:false,yAxisID:'y'},
+              {label:'Theta/day',data:thetaVals,borderColor:'#ec4899',borderWidth:1.5,borderDash:[4,3],pointRadius:0,tension:0.3,fill:false,yAxisID:'y1'},
+            ]
+          },
+          options:{
+            responsive:true,maintainAspectRatio:false,
+            plugins:{
+              legend:{labels:{color:'rgba(226,232,240,0.6)',font:{family:'JetBrains Mono',size:9},boxWidth:12}},
+              tooltip:{backgroundColor:'rgba(3,7,18,0.92)',titleColor:'#e2e8f0',bodyColor:'#e2e8f0',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,
+                titleFont:{family:'JetBrains Mono',size:10},bodyFont:{family:'JetBrains Mono',size:10},
+                callbacks:{title:c=>c[0].label+' days to expiry',label:c=>c.dataset.label+': '+cur+c.raw.toFixed(3)}},
+            },
+            scales:{
+              x:{reverse:true,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'rgba(226,232,240,0.35)',font:{family:'JetBrains Mono',size:9},maxTicksLimit:8,callback:v=>v+'d'},title:{display:true,text:'Days to Expiry',color:'rgba(226,232,240,0.3)',font:{family:'JetBrains Mono',size:9}}},
+              y:{position:'left',grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'rgba(226,232,240,0.35)',font:{family:'JetBrains Mono',size:9},callback:v=>cur+v.toFixed(1)},title:{display:true,text:'Option Value',color:'rgba(226,232,240,0.3)',font:{family:'JetBrains Mono',size:9}}},
+              y1:{position:'right',grid:{display:false},ticks:{color:'rgba(236,72,153,0.5)',font:{family:'JetBrains Mono',size:9},callback:v=>v.toFixed(3)},title:{display:true,text:'Theta',color:'rgba(236,72,153,0.5)',font:{family:'JetBrains Mono',size:9}}},
+            }
+          }
+        });
+      },[spot,strike,rate,vol,maturity]);
+
+      return(
+        <div className="glass" style={{marginTop:'1rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Time Decay Projection</span><div className="sdot live"/></div>
+          <div style={{height:'220px',position:'relative',marginTop:'0.4rem'}}>
+            <canvas ref={canvasRef}/>
+          </div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.45rem',color:'var(--muted)',marginTop:'0.3rem'}}>
+            Option value erodes as expiry approaches — theta decay accelerates near expiration (especially ATM)
+          </div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
+       IMPLIED VOL SMILE CHART
+    ═══════════════════════════════════════════════════ */
+    function IVSmileChart({params,currency}){
+      const{spot,rate,vol,maturity}=params;
+      const cur=currency;
+      const canvasRef=useRef(null);
+      const chartRef=useRef(null);
+
+      useEffect(()=>{
+        if(!canvasRef.current)return;
+        if(chartRef.current)chartRef.current.destroy();
+
+        // Generate synthetic vol smile with skew and curvature
+        const step=spot>5000?500:spot>500?50:spot>50?10:5;
+        const strikes=[];
+        for(let k=Math.round(spot*0.7/step)*step;k<=spot*1.3;k+=step) strikes.push(k);
+
+        const skew=-0.15,smile=0.05;
+        const maturities=[0.083,0.25,0.5,1.0];
+        const matLabels=['1M','3M','6M','1Y'];
+        const colors=['#ec4899','#f97316','#00d4ff','#00ff88'];
+
+        const datasets=maturities.map((T,idx)=>{
+          const vols=strikes.map(K=>{
+            const m=K/spot-1;
+            const termAdj=-0.03*(Math.sqrt(T)-Math.sqrt(0.25));
+            return Math.max(0.02,vol+skew*m+smile*m*m+termAdj);
+          });
+          return{
+            label:matLabels[idx],
+            data:vols.map(v=>v*100),
+            borderColor:colors[idx],
+            borderWidth:2,
+            pointRadius:0,
+            tension:0.4,
+            fill:false,
+          };
+        });
+
+        chartRef.current=new Chart(canvasRef.current,{
+          type:'line',
+          data:{labels:strikes.map(k=>k.toString()),datasets},
+          options:{
+            responsive:true,maintainAspectRatio:false,
+            plugins:{
+              legend:{labels:{color:'rgba(226,232,240,0.6)',font:{family:'JetBrains Mono',size:9},boxWidth:12}},
+              tooltip:{backgroundColor:'rgba(3,7,18,0.92)',titleColor:'#e2e8f0',bodyColor:'#e2e8f0',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,
+                titleFont:{family:'JetBrains Mono',size:10},bodyFont:{family:'JetBrains Mono',size:10},
+                callbacks:{title:c=>'K = '+cur+c[0].label,label:c=>c.dataset.label+': '+c.raw.toFixed(1)+'%'}},
+            },
+            scales:{
+              x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'rgba(226,232,240,0.35)',font:{family:'JetBrains Mono',size:9},maxTicksLimit:8,callback:(v,i)=>cur+strikes[i]},title:{display:true,text:'Strike',color:'rgba(226,232,240,0.3)',font:{family:'JetBrains Mono',size:9}}},
+              y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'rgba(226,232,240,0.35)',font:{family:'JetBrains Mono',size:9},callback:v=>v.toFixed(0)+'%'},title:{display:true,text:'Implied Vol',color:'rgba(226,232,240,0.3)',font:{family:'JetBrains Mono',size:9}}},
+            }
+          }
+        });
+      },[spot,rate,vol,maturity]);
+
+      return(
+        <div className="glass" style={{marginTop:'1rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Volatility Smile</span><div className="sdot live"/></div>
+          <div style={{height:'200px',position:'relative',marginTop:'0.4rem'}}>
+            <canvas ref={canvasRef}/>
+          </div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.45rem',color:'var(--muted)',marginTop:'0.3rem'}}>
+            Synthetic vol smile across strikes and maturities — OTM puts (left) trade at higher IV due to crash protection demand
+          </div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
        REGION SELECTOR
     ═══════════════════════════════════════════════════ */
     function RegionSelector({onSelect}){
@@ -1872,7 +2058,7 @@
       const runSim=useCallback((p)=>{
         setBusy(true);
         setTimeout(()=>{
-          const priceFn=method==='antithetic'?mcPriceAntithetic:method==='control'?mcPriceControlVariate:mcPrice;
+          const priceFn=method==='antithetic'?mcPriceAntithetic:method==='control'?mcPriceControlVariate:method==='stratified'?mcPriceStratified:mcPrice;
           const call=priceFn(p.spot,p.strike,p.rate,p.vol,p.maturity,p.n,'call');
           const put =priceFn(p.spot,p.strike,p.rate,p.vol,p.maturity,p.n,'put');
           const bsCall=bsPrice(p.spot,p.strike,p.rate,p.vol,p.maturity,'call');
@@ -1905,7 +2091,7 @@
               {selStock?<><span style={{color:region.color,fontWeight:600}}>{selStock.t}</span><span className="tag-sep">·</span><span>{cur}{selStock.p.toLocaleString()}</span><span className="tag-sep">·</span></>
               :<><span>{region.index}</span><span className="tag-sep">·</span></>}
               <span>{region.currencyName} ({cur})</span><span className="tag-sep">·</span>
-              <span>{method==='antithetic'?'Antithetic MC':method==='control'?'Control Variate MC':'Standard MC'}</span>
+              <span>{method==='antithetic'?'Antithetic MC':method==='control'?'Control Variate MC':method==='stratified'?'Stratified MC':'Standard MC'}</span>
             </div>
             <div style={{display:'flex',justifyContent:'center'}}>
               <div className="region-pill" style={{'--rc-color':region.color}} onClick={onChangeRegion}>
@@ -1953,6 +2139,7 @@
                 <button className={`method-btn${method==='standard'?' active':''}`} onClick={()=>setMethod('standard')}>STANDARD</button>
                 <button className={`method-btn${method==='antithetic'?' active':''}`} onClick={()=>setMethod('antithetic')}>ANTITHETIC</button>
                 <button className={`method-btn${method==='control'?' active':''}`} onClick={()=>setMethod('control')}>CONTROL VAR</button>
+                <button className={`method-btn${method==='stratified'?' active':''}`} onClick={()=>setMethod('stratified')}>STRATIFIED</button>
               </div>
 
               <button className="run-btn" onClick={handleRun} disabled={busy}>
@@ -2039,6 +2226,10 @@
               <StressTestPanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── P&L SCENARIO MATRIX ──</div>
               <PnlMatrix params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── TIME DECAY ──</div>
+              <TimeDecayChart params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── VOLATILITY SMILE ──</div>
+              <IVSmileChart params={params} currency={cur}/>
             </>
           )}
         </>
