@@ -1116,6 +1116,67 @@
       return{price,se,earlyPct,euroPrice,premium:price-euroPrice};
     }
 
+    // Merton Jump-Diffusion: GBM + Poisson jumps
+    function mcJumpDiffusion(S,K,r,sigma,T,N,ot,lambda,muJ,sigJ){
+      lambda=lambda||1.0; muJ=muJ||-0.05; sigJ=sigJ||0.10;
+      const k=Math.exp(muJ+0.5*sigJ*sigJ)-1;
+      const drift=(r-lambda*k-0.5*sigma*sigma)*T;
+      const diff=sigma*Math.sqrt(T);
+      const disc=Math.exp(-r*T);
+      let sum=0,sumSq=0,sumGbm=0;
+      for(let i=0;i<N;i++){
+        const z=randn();
+        // Poisson jumps
+        let nj=0,L=Math.exp(-lambda*T),p2=1;
+        do{p2*=Math.random();nj++;}while(p2>L);
+        nj--;
+        let jumpSum=0;
+        for(let j=0;j<nj;j++) jumpSum+=muJ+sigJ*randn();
+        const ST=S*Math.exp(drift+diff*z+jumpSum);
+        const pay=ot==='call'?Math.max(ST-K,0):Math.max(K-ST,0);
+        sum+=pay;sumSq+=pay*pay;
+        // GBM comparison (no jumps)
+        const gbmST=S*Math.exp((r-0.5*sigma*sigma)*T+sigma*Math.sqrt(T)*z);
+        sumGbm+=ot==='call'?Math.max(gbmST-K,0):Math.max(K-gbmST,0);
+      }
+      const mu=sum/N,v2=Math.max(sumSq/N-mu*mu,0);
+      const price=disc*mu,se=disc*Math.sqrt(v2/N);
+      const gbmPrice=disc*sumGbm/N;
+      return{price,se,ci:[price-1.96*se,price+1.96*se],gbmPrice,jumpPremium:price-gbmPrice};
+    }
+
+    // MC Greeks via finite difference (bump-and-revalue)
+    function mcGreeksFD(S,K,r,sigma,T,N,ot){
+      const priceFunc=(s,k2,r2,v2,t2)=>{
+        const d=(r2-0.5*v2*v2)*t2,df=v2*Math.sqrt(t2),dc=Math.exp(-r2*t2);
+        let sm=0;
+        for(let i=0;i<N;i++){
+          const z=randn();
+          const st=s*Math.exp(d+df*z);
+          sm+=ot==='call'?Math.max(st-k2,0):Math.max(k2-st,0);
+        }
+        return dc*sm/N;
+      };
+      const base=priceFunc(S,K,r,sigma,T);
+      // Delta
+      const hS=S*0.01;
+      const vUp=priceFunc(S+hS,K,r,sigma,T),vDn=priceFunc(S-hS,K,r,sigma,T);
+      const delta=(vUp-vDn)/(2*hS);
+      // Gamma
+      const gamma=(vUp-2*base+vDn)/(hS*hS);
+      // Vega
+      const hV=0.01;
+      const vVup=priceFunc(S,K,r,sigma+hV,T),vVdn=priceFunc(S,K,r,Math.max(0.01,sigma-hV),T);
+      const vega=(vVup-vVdn)/(2*hV*100);
+      // Theta
+      const hT=1/252;
+      const theta=T>hT?(priceFunc(S,K,r,sigma,T-hT)-base)/hT/252:0;
+      // Rho
+      const hR=0.001;
+      const rho=(priceFunc(S,K,r+hR,sigma,T)-base)/(hR*100);
+      return{delta,gamma,vega,theta,rho,basePrice:base};
+    }
+
     function ExoticPanel({params,currency}){
       const{spot,strike,rate,vol,maturity,n}=params;
       const cur=currency;
@@ -1142,7 +1203,7 @@
             const c=mcLookbackPrice(spot,strike,rate,vol,maturity,N,'call');
             const p=mcLookbackPrice(spot,strike,rate,vol,maturity,N,'put');
             result={call:c,put:p,type:'Lookback (Floating Strike)'};
-          }else{
+          }else if(exType==='digital'){
             const c=mcDigitalPrice(spot,strike,rate,vol,maturity,N,'call',100);
             const p=mcDigitalPrice(spot,strike,rate,vol,maturity,N,'put',100);
             result={call:c,put:p,type:'Digital (Cash-or-Nothing)',itmProb:c.itmProb};
@@ -2181,6 +2242,239 @@
     }
 
     /* ═══════════════════════════════════════════════════
+       JUMP-DIFFUSION PANEL
+    ═══════════════════════════════════════════════════ */
+    function JumpDiffusionPanel({params,currency}){
+      const{spot,strike,rate,vol,maturity,n}=params;
+      const cur=currency;
+      const[lambda,setLambda]=useState(1.0);
+      const[muJ,setMuJ]=useState(-0.05);
+      const[sigJ,setSigJ]=useState(0.10);
+      const[jdRes,setJdRes]=useState(null);
+      const[jdBusy,setJdBusy]=useState(false);
+
+      const runJD=()=>{
+        setJdBusy(true);
+        setTimeout(()=>{
+          const N=Math.min(n,40000);
+          const call=mcJumpDiffusion(spot,strike,rate,vol,maturity,N,'call',lambda,muJ,sigJ);
+          const put=mcJumpDiffusion(spot,strike,rate,vol,maturity,N,'put',lambda,muJ,sigJ);
+          // Multi-lambda comparison
+          const lambdas=[0.5,1.0,2.0,3.0,5.0];
+          const comparison=lambdas.map(l=>{
+            const c=mcJumpDiffusion(spot,strike,rate,vol,maturity,Math.min(N,15000),'call',l,muJ,sigJ);
+            const p=mcJumpDiffusion(spot,strike,rate,vol,maturity,Math.min(N,15000),'put',l,muJ,sigJ);
+            return{lambda:l,callPrice:c.price,putPrice:p.price,callPremium:c.jumpPremium,putPremium:p.jumpPremium};
+          });
+          setJdRes({call,put,comparison});
+          setJdBusy(false);
+          gsap.fromTo('.jd-result',{y:15,opacity:0},{y:0,opacity:1,duration:0.5,ease:'back.out(1.4)'});
+        },30);
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1.5rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Merton Jump-Diffusion</span><div className="sdot"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--muted)',margin:'0.4rem 0 0.6rem',lineHeight:'1.5'}}>
+            GBM + Poisson jumps — captures fat tails and sudden crashes that pure Brownian motion cannot model.
+            S(t) = GBM × Πe^(J_i) where J ~ N(μ_J, σ_J) with arrival rate λ.
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'0.5rem',marginBottom:'0.6rem'}}>
+            <div style={{display:'flex',flexDirection:'column',gap:'0.15rem'}}>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.45rem',color:'var(--muted)',letterSpacing:'0.1em'}}>JUMP INTENSITY (λ)</span>
+              <input type="range" min="0.1" max="10" step="0.1" value={lambda} onChange={e=>setLambda(+e.target.value)}
+                style={{accentColor:'var(--accent)'}}/>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.6rem',color:'var(--text)',textAlign:'center'}}>{lambda.toFixed(1)} jumps/yr</span>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:'0.15rem'}}>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.45rem',color:'var(--muted)',letterSpacing:'0.1em'}}>JUMP MEAN (μ_J)</span>
+              <input type="range" min="-0.30" max="0.10" step="0.01" value={muJ} onChange={e=>setMuJ(+e.target.value)}
+                style={{accentColor:'#f97316'}}/>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.6rem',color:muJ<0?'#f97316':'#00ff88',textAlign:'center'}}>{(muJ*100).toFixed(0)}% {muJ<0?'crash':'rally'}</span>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:'0.15rem'}}>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.45rem',color:'var(--muted)',letterSpacing:'0.1em'}}>JUMP VOL (σ_J)</span>
+              <input type="range" min="0.01" max="0.40" step="0.01" value={sigJ} onChange={e=>setSigJ(+e.target.value)}
+                style={{accentColor:'#a855f7'}}/>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.6rem',color:'var(--text)',textAlign:'center'}}>{(sigJ*100).toFixed(0)}%</span>
+            </div>
+          </div>
+          <button className="run-btn" style={{fontSize:'0.6rem',padding:'0.5rem 1.2rem'}} onClick={runJD} disabled={jdBusy}>
+            {jdBusy?'SIMULATING...':'RUN JUMP-DIFFUSION'}
+          </button>
+          {jdRes&&(
+            <div className="jd-result" style={{marginTop:'0.7rem'}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.5rem'}}>
+                <div className="opt-card">
+                  <div className="opt-type" style={{fontSize:'0.52rem'}}>JD CALL</div>
+                  <div className="opt-price call" style={{fontSize:'1rem'}}>{cur}{jdRes.call.price.toFixed(4)}</div>
+                  <div className="opt-se">SE: {cur}{jdRes.call.se.toFixed(5)}</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:jdRes.call.jumpPremium>0?'#f97316':'#00ff88',marginTop:'0.15rem'}}>
+                    Jump premium: {jdRes.call.jumpPremium>0?'+':''}{cur}{jdRes.call.jumpPremium.toFixed(4)}
+                  </div>
+                </div>
+                <div className="opt-card">
+                  <div className="opt-type" style={{fontSize:'0.52rem'}}>JD PUT</div>
+                  <div className="opt-price put" style={{fontSize:'1rem'}}>{cur}{jdRes.put.price.toFixed(4)}</div>
+                  <div className="opt-se">SE: {cur}{jdRes.put.se.toFixed(5)}</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:jdRes.put.jumpPremium>0?'#f97316':'#00ff88',marginTop:'0.15rem'}}>
+                    Jump premium: {jdRes.put.jumpPremium>0?'+':''}{cur}{jdRes.put.jumpPremium.toFixed(4)}
+                  </div>
+                </div>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.3rem',marginTop:'0.5rem'}}>
+                <div style={{background:'rgba(0,255,136,0.06)',border:'1px solid rgba(0,255,136,0.12)',borderRadius:'6px',padding:'0.4rem'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)',letterSpacing:'0.1em'}}>GBM CALL (NO JUMPS)</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.75rem',color:'#00ff88',marginTop:'0.1rem'}}>{cur}{jdRes.call.gbmPrice.toFixed(4)}</div>
+                </div>
+                <div style={{background:'rgba(249,115,22,0.06)',border:'1px solid rgba(249,115,22,0.12)',borderRadius:'6px',padding:'0.4rem'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)',letterSpacing:'0.1em'}}>GBM PUT (NO JUMPS)</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.75rem',color:'#f97316',marginTop:'0.1rem'}}>{cur}{jdRes.put.gbmPrice.toFixed(4)}</div>
+                </div>
+              </div>
+              {/* Lambda comparison table */}
+              <div style={{marginTop:'0.6rem'}}>
+                <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--accent)',letterSpacing:'0.15em',marginBottom:'0.3rem'}}>JUMP INTENSITY COMPARISON</div>
+                <table style={{width:'100%',borderCollapse:'collapse',fontFamily:'JetBrains Mono',fontSize:'0.48rem'}}>
+                  <thead>
+                    <tr style={{borderBottom:'1px solid var(--border)'}}>
+                      <th style={{padding:'0.25rem',textAlign:'left',color:'var(--muted)'}}>λ (jumps/yr)</th>
+                      <th style={{padding:'0.25rem',textAlign:'right',color:'var(--muted)'}}>Call</th>
+                      <th style={{padding:'0.25rem',textAlign:'right',color:'var(--muted)'}}>Put</th>
+                      <th style={{padding:'0.25rem',textAlign:'right',color:'var(--muted)'}}>Call Δ</th>
+                      <th style={{padding:'0.25rem',textAlign:'right',color:'var(--muted)'}}>Put Δ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {jdRes.comparison.map((row,i)=>(
+                      <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                        <td style={{padding:'0.2rem 0.25rem',color:'var(--text)'}}>{row.lambda.toFixed(1)}</td>
+                        <td style={{padding:'0.2rem 0.25rem',textAlign:'right',color:'#00ff88'}}>{cur}{row.callPrice.toFixed(3)}</td>
+                        <td style={{padding:'0.2rem 0.25rem',textAlign:'right',color:'#f97316'}}>{cur}{row.putPrice.toFixed(3)}</td>
+                        <td style={{padding:'0.2rem 0.25rem',textAlign:'right',color:row.callPremium>0?'#f97316':'#00ff88'}}>{row.callPremium>0?'+':''}{cur}{row.callPremium.toFixed(3)}</td>
+                        <td style={{padding:'0.2rem 0.25rem',textAlign:'right',color:row.putPremium>0?'#f97316':'#00ff88'}}>{row.putPremium>0?'+':''}{cur}{row.putPremium.toFixed(3)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
+       MC GREEKS PANEL
+    ═══════════════════════════════════════════════════ */
+    function MCGreeksPanel({params,currency}){
+      const{spot,strike,rate,vol,maturity,n}=params;
+      const cur=currency;
+      const[mcgRes,setMcgRes]=useState(null);
+      const[mcgBusy,setMcgBusy]=useState(false);
+
+      const runMCG=()=>{
+        setMcgBusy(true);
+        setTimeout(()=>{
+          const N=Math.min(n,20000);
+          const callMC=mcGreeksFD(spot,strike,rate,vol,maturity,N,'call');
+          const putMC=mcGreeksFD(spot,strike,rate,vol,maturity,N,'put');
+          const bsG=bsGreeks(spot,strike,rate,vol,maturity);
+          setMcgRes({call:callMC,put:putMC,bs:bsG});
+          setMcgBusy(false);
+          gsap.fromTo('.mcg-result',{y:15,opacity:0},{y:0,opacity:1,duration:0.5,ease:'back.out(1.4)'});
+        },30);
+      };
+
+      const greekRow=(label,mcVal,bsVal,fmt)=>{
+        const diff=bsVal!=null?Math.abs(mcVal-bsVal):null;
+        return(
+          <tr style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+            <td style={{padding:'0.25rem',color:'var(--accent)',fontWeight:600}}>{label}</td>
+            <td style={{padding:'0.25rem',textAlign:'right',color:'var(--text)'}}>{fmt(mcVal)}</td>
+            <td style={{padding:'0.25rem',textAlign:'right',color:'var(--muted)'}}>{bsVal!=null?fmt(bsVal):'—'}</td>
+            <td style={{padding:'0.25rem',textAlign:'right',color:diff!=null&&diff<0.05?'#00ff88':'#f97316'}}>{diff!=null?fmt(diff):'—'}</td>
+          </tr>
+        );
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1.5rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Monte Carlo Greeks</span><div className="sdot"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--muted)',margin:'0.4rem 0 0.6rem',lineHeight:'1.5'}}>
+            Greeks via finite difference bump-and-revalue on MC simulations. Unlike analytical BS Greeks, these work for any payoff (exotic, path-dependent).
+          </div>
+          <button className="run-btn" style={{fontSize:'0.6rem',padding:'0.5rem 1.2rem'}} onClick={runMCG} disabled={mcgBusy}>
+            {mcgBusy?'COMPUTING GREEKS...':'COMPUTE MC GREEKS'}
+          </button>
+          {mcgRes&&(
+            <div className="mcg-result" style={{marginTop:'0.7rem'}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.6rem'}}>
+                {/* Call Greeks */}
+                <div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.5rem',color:'#00ff88',letterSpacing:'0.15em',marginBottom:'0.3rem'}}>CALL GREEKS</div>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontFamily:'JetBrains Mono',fontSize:'0.48rem'}}>
+                    <thead>
+                      <tr style={{borderBottom:'1px solid var(--border)'}}>
+                        <th style={{padding:'0.2rem',textAlign:'left',color:'var(--muted)'}}>Greek</th>
+                        <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>MC</th>
+                        <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>BS</th>
+                        <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>|Δ|</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {greekRow('Delta',mcgRes.call.delta,mcgRes.bs?.callDelta,v=>v.toFixed(4))}
+                      {greekRow('Gamma',mcgRes.call.gamma,mcgRes.bs?.gamma,v=>v.toFixed(5))}
+                      {greekRow('Vega',mcgRes.call.vega,mcgRes.bs?.vega,v=>v.toFixed(4))}
+                      {greekRow('Theta',mcgRes.call.theta,mcgRes.bs?.callTheta,v=>v.toFixed(4))}
+                      {greekRow('Rho',mcgRes.call.rho,null,v=>v.toFixed(4))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Put Greeks */}
+                <div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.5rem',color:'#f97316',letterSpacing:'0.15em',marginBottom:'0.3rem'}}>PUT GREEKS</div>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontFamily:'JetBrains Mono',fontSize:'0.48rem'}}>
+                    <thead>
+                      <tr style={{borderBottom:'1px solid var(--border)'}}>
+                        <th style={{padding:'0.2rem',textAlign:'left',color:'var(--muted)'}}>Greek</th>
+                        <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>MC</th>
+                        <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>BS</th>
+                        <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>|Δ|</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {greekRow('Delta',mcgRes.put.delta,mcgRes.bs?.putDelta,v=>v.toFixed(4))}
+                      {greekRow('Gamma',mcgRes.put.gamma,mcgRes.bs?.gamma,v=>v.toFixed(5))}
+                      {greekRow('Vega',mcgRes.put.vega,mcgRes.bs?.vega,v=>v.toFixed(4))}
+                      {greekRow('Theta',mcgRes.put.theta,mcgRes.bs?.putTheta,v=>v.toFixed(4))}
+                      {greekRow('Rho',mcgRes.put.rho,null,v=>v.toFixed(4))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div style={{marginTop:'0.5rem',display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'0.3rem'}}>
+                {[
+                  ['DELTA',mcgRes.call.delta,'#00ff88','Spot sensitivity'],
+                  ['GAMMA',mcgRes.call.gamma,'#00d4ff','Convexity'],
+                  ['VEGA',mcgRes.call.vega,'#a855f7','Vol sensitivity'],
+                  ['THETA',mcgRes.call.theta,'#f97316','Time decay'],
+                  ['RHO',mcgRes.call.rho,'#ec4899','Rate sensitivity'],
+                ].map(([name,val,col,desc])=>(
+                  <div key={name} style={{background:`${col}0F`,border:`1px solid ${col}20`,borderRadius:'6px',padding:'0.35rem',textAlign:'center'}}>
+                    <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)',letterSpacing:'0.1em'}}>{name}</div>
+                    <div style={{fontFamily:'JetBrains Mono',fontSize:'0.7rem',color:col,marginTop:'0.1rem'}}>{val.toFixed(4)}</div>
+                    <div style={{fontFamily:'JetBrains Mono',fontSize:'0.35rem',color:'var(--muted)'}}>{desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
        REGION SELECTOR
     ═══════════════════════════════════════════════════ */
     function RegionSelector({onSelect}){
@@ -2426,6 +2720,10 @@
               <TimeDecayChart params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── VOLATILITY SMILE ──</div>
               <IVSmileChart params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── JUMP-DIFFUSION MODEL ──</div>
+              <JumpDiffusionPanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── MONTE CARLO GREEKS ──</div>
+              <MCGreeksPanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── PORTFOLIO RISK ──</div>
               <PortfolioPanel region={region} currency={cur}/>
             </>
