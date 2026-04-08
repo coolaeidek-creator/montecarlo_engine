@@ -23,5 +23,6 @@ from .mc_greeks import mc_greeks
 from .american import price_american
 from .heston import price_heston, heston_smile
 from .yield_curve import generate_yield_curve, price_with_term_structure
+from .sabr import sabr_implied_vol, sabr_smile, sabr_surface
 
-__version__ = "2.2.0"
+__version__ = "2.3.0"

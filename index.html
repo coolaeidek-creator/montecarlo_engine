@@ -3288,6 +3288,231 @@
     }
 
     /* ═══════════════════════════════════════════════════
+       SABR SMILE PANEL
+    ═══════════════════════════════════════════════════ */
+    function SABRPanel({params,currency}){
+      const{spot,rate,maturity,vol}=params;
+      const cur=currency;
+      const[alpha,setAlpha]=useState(0.3);
+      const[beta,setBeta]=useState(0.7);
+      const[rhoS,setRhoS]=useState(-0.25);
+      const[sig0,setSig0]=useState(vol||0.25);
+      const[sabrRes,setSabrRes]=useState(null);
+
+      const sabrIV=(F,K,T,a,b,rh,s0)=>{
+        if(F<=0||K<=0||T<=0)return 0;
+        if(Math.abs(F-K)<1e-10){
+          const fm=F,t1=s0/(fm**(1-b));
+          const t2=((1-b)**2/24)*s0**2/(fm**(2*(1-b)))+0.25*rh*b*a*s0/(fm**(1-b))+(2-3*rh**2)/24*a**2;
+          return t1*(1+t2*T);
+        }
+        const fk=(F*K)**((1-b)/2),lnfk=Math.log(F/K);
+        const z=(a/s0)*fk*lnfk;
+        const xz=Math.log((Math.sqrt(1-2*rh*z+z*z)+z-rh)/(1-rh));
+        const zox=Math.abs(xz)<1e-10?1:z/xz;
+        const fkb=(F*K)**((1-b)/2);
+        const pre=s0/(fkb*(1+(1-b)**2/24*lnfk**2+(1-b)**4/1920*lnfk**4));
+        const t2=((1-b)**2/24)*s0**2/((F*K)**(1-b))+0.25*rh*b*a*s0/fkb+(2-3*rh**2)/24*a**2;
+        return pre*zox*(1+t2*T);
+      };
+
+      const run=()=>{
+        const F=spot*Math.exp(rate*maturity);
+        const moneys=[0.80,0.85,0.90,0.95,0.975,1.0,1.025,1.05,1.10,1.15,1.20];
+        const results=moneys.map(m=>{
+          const K=spot*m;
+          const iv=Math.max(0.001,sabrIV(F,K,maturity,alpha,beta,rhoS,sig0));
+          const price=bsPrice(spot,K,rate,iv,maturity,'call');
+          return{moneyness:m,strike:K,iv,price};
+        });
+        const atmIv=results.find(r=>r.moneyness===1.0)?.iv||sig0;
+        setSabrRes({results,atmIv,forward:F});
+        gsap.fromTo('.sabr-result',{y:15,opacity:0},{y:0,opacity:1,duration:0.5,ease:'back.out(1.4)'});
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1.5rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">SABR Volatility Model</span><div className="sdot"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--muted)',margin:'0.4rem 0 0.5rem',lineHeight:'1.5'}}>
+            Industry-standard for rates/FX vol modeling. dF = σ·F^β·dW₁, dσ = α·σ·dW₂, Corr = ρ
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:'0.5rem',marginBottom:'0.6rem'}}>
+            <div style={{display:'flex',flexDirection:'column',gap:'0.15rem'}}>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)'}}>ALPHA (α)</span>
+              <input type="range" min="0.05" max="1.0" step="0.05" value={alpha} onChange={e=>setAlpha(+e.target.value)} style={{accentColor:'var(--accent)'}}/>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.55rem',color:'var(--text)',textAlign:'center'}}>{alpha.toFixed(2)}</span>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:'0.15rem'}}>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)'}}>BETA (β)</span>
+              <input type="range" min="0" max="1" step="0.1" value={beta} onChange={e=>setBeta(+e.target.value)} style={{accentColor:'#00d4ff'}}/>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.55rem',color:'var(--text)',textAlign:'center'}}>{beta.toFixed(1)}</span>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:'0.15rem'}}>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)'}}>RHO (ρ)</span>
+              <input type="range" min="-0.9" max="0.9" step="0.05" value={rhoS} onChange={e=>setRhoS(+e.target.value)} style={{accentColor:'#ec4899'}}/>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.55rem',color:rhoS<0?'#f97316':'#00ff88',textAlign:'center'}}>{rhoS.toFixed(2)}</span>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:'0.15rem'}}>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)'}}>σ₀ (init vol)</span>
+              <input type="range" min="0.05" max="0.80" step="0.01" value={sig0} onChange={e=>setSig0(+e.target.value)} style={{accentColor:'#a855f7'}}/>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.55rem',color:'var(--text)',textAlign:'center'}}>{(sig0*100).toFixed(0)}%</span>
+            </div>
+          </div>
+          <button className="run-btn" style={{fontSize:'0.6rem',padding:'0.5rem 1.2rem'}} onClick={run}>GENERATE SABR SMILE</button>
+          {sabrRes&&(
+            <div className="sabr-result" style={{marginTop:'0.7rem'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontFamily:'JetBrains Mono',fontSize:'0.48rem'}}>
+                <thead>
+                  <tr style={{borderBottom:'1px solid var(--border)'}}>
+                    <th style={{padding:'0.2rem',textAlign:'left',color:'var(--muted)'}}>K/S</th>
+                    <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>Strike</th>
+                    <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>SABR IV</th>
+                    <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>Skew</th>
+                    <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>Call Price</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sabrRes.results.map((r,i)=>{
+                    const skew=r.iv-sabrRes.atmIv;
+                    return(
+                      <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)',background:r.moneyness===1.0?'rgba(0,255,136,0.04)':'transparent'}}>
+                        <td style={{padding:'0.2rem',color:r.moneyness<1?'#f97316':r.moneyness>1?'#00d4ff':'var(--accent)'}}>{(r.moneyness*100).toFixed(1)}%</td>
+                        <td style={{padding:'0.2rem',textAlign:'right',color:'var(--text)'}}>{cur}{r.strike.toFixed(1)}</td>
+                        <td style={{padding:'0.2rem',textAlign:'right',color:'#a855f7'}}>{(r.iv*100).toFixed(2)}%</td>
+                        <td style={{padding:'0.2rem',textAlign:'right',color:skew>0.005?'#f97316':skew<-0.005?'#00ff88':'var(--muted)'}}>{skew>0?'+':''}{(skew*100).toFixed(2)}%</td>
+                        <td style={{padding:'0.2rem',textAlign:'right',color:'#00ff88'}}>{cur}{r.price.toFixed(3)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <div style={{marginTop:'0.4rem',display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.3rem'}}>
+                <div style={{background:'rgba(0,255,136,0.06)',border:'1px solid rgba(0,255,136,0.12)',borderRadius:'6px',padding:'0.35rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>ATM IV</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.7rem',color:'#00ff88',marginTop:'0.1rem'}}>{(sabrRes.atmIv*100).toFixed(2)}%</div>
+                </div>
+                <div style={{background:'rgba(249,115,22,0.06)',border:'1px solid rgba(249,115,22,0.12)',borderRadius:'6px',padding:'0.35rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>25D SKEW</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.7rem',color:'#f97316',marginTop:'0.1rem'}}>
+                    {((sabrRes.results.find(r=>r.moneyness===0.90)?.iv||0)-(sabrRes.results.find(r=>r.moneyness===1.10)?.iv||0)).toFixed(4)}
+                  </div>
+                </div>
+                <div style={{background:'rgba(168,85,247,0.06)',border:'1px solid rgba(168,85,247,0.12)',borderRadius:'6px',padding:'0.35rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>FORWARD</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.7rem',color:'#a855f7',marginTop:'0.1rem'}}>{cur}{sabrRes.forward.toFixed(2)}</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
+       MC PATH VISUALIZATION
+    ═══════════════════════════════════════════════════ */
+    function PathVisPanel({params,currency}){
+      const{spot,rate,vol,maturity}=params;
+      const cur=currency;
+      const[pathRes,setPathRes]=useState(null);
+      const chartRef=useRef(null);
+      const chartInst=useRef(null);
+
+      const run=()=>{
+        const nPaths=20,steps=100,dt=maturity/steps;
+        const paths=[];
+        let maxS=spot,minS=spot;
+        const finalPrices=[];
+        for(let p=0;p<nPaths;p++){
+          const path=[spot];
+          let s=spot;
+          for(let t=0;t<steps;t++){
+            s*=Math.exp((rate-0.5*vol*vol)*dt+vol*Math.sqrt(dt)*randn());
+            path.push(s);
+            if(s>maxS)maxS=s;
+            if(s<minS)minS=s;
+          }
+          paths.push(path);
+          finalPrices.push(s);
+        }
+        // Stats
+        const avgFinal=finalPrices.reduce((a,b)=>a+b,0)/nPaths;
+        const sortedF=[...finalPrices].sort((a,b)=>a-b);
+        const p5=sortedF[Math.floor(nPaths*0.05)];
+        const p95=sortedF[Math.floor(nPaths*0.95)];
+        const aboveStart=finalPrices.filter(s=>s>spot).length/nPaths;
+
+        setPathRes({paths,maxS,minS,avgFinal,p5,p95,aboveStart,steps});
+
+        // Chart
+        setTimeout(()=>{
+          if(!chartRef.current)return;
+          if(chartInst.current)chartInst.current.destroy();
+          const labels=Array.from({length:steps+1},(_,i)=>(i*maturity/steps).toFixed(2));
+          const colors=['#00ff88','#f97316','#00d4ff','#a855f7','#ec4899','#ef4444','#84cc16','#06b6d4','#f59e0b','#8b5cf6'];
+          chartInst.current=new Chart(chartRef.current,{
+            type:'line',
+            data:{
+              labels,
+              datasets:paths.slice(0,10).map((p,i)=>({
+                label:'Path '+(i+1),
+                data:p,
+                borderColor:colors[i%colors.length],
+                borderWidth:1,
+                pointRadius:0,
+                tension:0.1,
+                fill:false,
+              })),
+            },
+            options:{
+              responsive:true,maintainAspectRatio:false,
+              plugins:{legend:{display:false}},
+              scales:{
+                x:{title:{display:true,text:'Time (years)',color:'rgba(255,255,255,0.3)',font:{family:'JetBrains Mono',size:8}},ticks:{color:'rgba(255,255,255,0.3)',font:{family:'JetBrains Mono',size:7},maxTicksLimit:8},grid:{color:'rgba(255,255,255,0.04)'}},
+                y:{title:{display:true,text:'Price',color:'rgba(255,255,255,0.3)',font:{family:'JetBrains Mono',size:8}},ticks:{color:'rgba(255,255,255,0.3)',font:{family:'JetBrains Mono',size:7}},grid:{color:'rgba(255,255,255,0.06)'}},
+              },
+            },
+          });
+        },50);
+
+        gsap.fromTo('.path-result',{y:15,opacity:0},{y:0,opacity:1,duration:0.5,ease:'back.out(1.4)'});
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1.5rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">GBM Path Visualization</span><div className="sdot"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--muted)',margin:'0.4rem 0 0.6rem'}}>
+            Simulate and visualize 20 GBM stock price paths. See the randomness that drives Monte Carlo pricing.
+          </div>
+          <button className="run-btn" style={{fontSize:'0.6rem',padding:'0.5rem 1.2rem'}} onClick={run}>SIMULATE PATHS</button>
+          {pathRes&&(
+            <div className="path-result" style={{marginTop:'0.7rem'}}>
+              <div style={{height:'220px',marginBottom:'0.5rem'}}><canvas ref={chartRef}/></div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'0.3rem'}}>
+                <div style={{background:'rgba(0,255,136,0.06)',border:'1px solid rgba(0,255,136,0.12)',borderRadius:'6px',padding:'0.35rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>AVG FINAL</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.65rem',color:'#00ff88',marginTop:'0.1rem'}}>{cur}{pathRes.avgFinal.toFixed(2)}</div>
+                </div>
+                <div style={{background:'rgba(249,115,22,0.06)',border:'1px solid rgba(249,115,22,0.12)',borderRadius:'6px',padding:'0.35rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>5th-95th %ile</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.55rem',color:'#f97316',marginTop:'0.1rem'}}>{cur}{pathRes.p5.toFixed(0)}–{cur}{pathRes.p95.toFixed(0)}</div>
+                </div>
+                <div style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.12)',borderRadius:'6px',padding:'0.35rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>% ABOVE START</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.65rem',color:'#00d4ff',marginTop:'0.1rem'}}>{(pathRes.aboveStart*100).toFixed(0)}%</div>
+                </div>
+                <div style={{background:'rgba(168,85,247,0.06)',border:'1px solid rgba(168,85,247,0.12)',borderRadius:'6px',padding:'0.35rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>RANGE</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.55rem',color:'#a855f7',marginTop:'0.1rem'}}>{cur}{pathRes.minS.toFixed(0)}–{cur}{pathRes.maxS.toFixed(0)}</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
        REGION SELECTOR
     ═══════════════════════════════════════════════════ */
     function RegionSelector({onSelect}){
@@ -3549,6 +3774,10 @@
               <CorrelationPanel region={region} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── CONVERGENCE DIAGNOSTIC ──</div>
               <ConvergenceDiagPanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── SABR VOLATILITY MODEL ──</div>
+              <SABRPanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── GBM PATH VISUALIZATION ──</div>
+              <PathVisPanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── PORTFOLIO RISK ──</div>
               <PortfolioPanel region={region} currency={cur}/>
             </>
