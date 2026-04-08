@@ -21,6 +21,7 @@ from .schemas import (
     PriceRequest, ExoticRequest, RiskRequest,
     IVRequest, GreeksRequest, VolSurfaceRequest, StockPriceRequest,
     JumpDiffusionRequest, MCGreeksRequest, AmericanRequest,
+    HestonRequest, YieldCurveRequest,
 )
 
 import sys
@@ -39,6 +40,8 @@ from engine.scenarios import spot_sensitivity, pnl_matrix, stress_test, time_dec
 from engine.jump_diffusion import simulate_jump_diffusion
 from engine.mc_greeks import mc_greeks
 from engine.american import price_american
+from engine.heston import price_heston, heston_smile
+from engine.yield_curve import generate_yield_curve
 from engine.stocks import REGIONS, get_stock, get_region
 
 
@@ -346,3 +349,45 @@ def price_american_option(req: AmericanRequest):
     )
     result["confidence_interval"] = list(result["confidence_interval"])
     return result
+
+
+# ─── Heston Stochastic Volatility ───────────────────────────────────────────
+
+@app.post("/api/heston")
+def heston_price(req: HestonRequest):
+    """Price option under Heston stochastic volatility model."""
+    market = MarketEnvironment(
+        spot=req.spot, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+    )
+    contract = OptionContract(strike=req.strike, option_type=req.option_type)
+    result = price_heston(
+        market, contract, req.n_simulations, req.n_steps,
+        req.kappa, req.theta, req.vol_of_vol, req.rho,
+    )
+    result["confidence_interval"] = list(result["confidence_interval"])
+    return result
+
+
+@app.post("/api/heston/smile")
+def heston_vol_smile(req: HestonRequest):
+    """Generate implied volatility smile from Heston model."""
+    market = MarketEnvironment(
+        spot=req.spot, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+    )
+    return heston_smile(
+        market, req.n_simulations, req.n_steps,
+        req.kappa, req.theta, req.vol_of_vol, req.rho,
+    )
+
+
+# ─── Yield Curve ────────────────────────────────────────────────────────────
+
+@app.post("/api/yield-curve")
+def get_yield_curve(req: YieldCurveRequest):
+    """Generate yield curve / term structure."""
+    return generate_yield_curve(
+        model=req.model, rate=req.rate,
+        n_points=req.n_points, max_maturity=req.max_maturity,
+    )

@@ -2475,6 +2475,295 @@
     }
 
     /* ═══════════════════════════════════════════════════
+       HESTON STOCHASTIC VOL PANEL
+    ═══════════════════════════════════════════════════ */
+    function HestonPanel({params,currency}){
+      const{spot,strike,rate,vol,maturity,n}=params;
+      const cur=currency;
+      const[kappa,setKappa]=useState(2.0);
+      const[theta,setTheta]=useState(0.04);
+      const[vov,setVov]=useState(0.3);
+      const[rho,setRho]=useState(-0.7);
+      const[hRes,setHRes]=useState(null);
+      const[hBusy,setHBusy]=useState(false);
+
+      // Heston MC in JS (Euler-Maruyama)
+      const runHeston=()=>{
+        setHBusy(true);
+        setTimeout(()=>{
+          const N=Math.min(n,20000),steps=150,dt=maturity/steps;
+          const v0=vol*vol;
+          const disc=Math.exp(-rate*maturity);
+
+          const priceH=(ot)=>{
+            let sum=0,sumSq=0,sumGbm=0;
+            for(let i=0;i<N;i++){
+              let S=spot,v=v0;
+              for(let t=0;t<steps;t++){
+                const z1=randn(),z2p=randn();
+                const z2=rho*z1+Math.sqrt(1-rho*rho)*z2p;
+                const vp=Math.max(v,0),sv=Math.sqrt(vp);
+                S=S*Math.exp((rate-0.5*vp)*dt+sv*Math.sqrt(dt)*z1);
+                v=v+kappa*(theta-vp)*dt+vov*sv*Math.sqrt(dt)*z2;
+              }
+              const pay=ot==='call'?Math.max(S-strike,0):Math.max(strike-S,0);
+              sum+=pay;sumSq+=pay*pay;
+              // GBM comparison
+              const zg=randn();
+              const sg=spot*Math.exp((rate-0.5*vol*vol)*maturity+vol*Math.sqrt(maturity)*zg);
+              sumGbm+=ot==='call'?Math.max(sg-strike,0):Math.max(strike-sg,0);
+            }
+            const mu=sum/N,v2=Math.max(sumSq/N-mu*mu,0);
+            const p=disc*mu,se=disc*Math.sqrt(v2/N);
+            return{price:p,se,gbmPrice:disc*sumGbm/N,premium:p-disc*sumGbm/N};
+          };
+
+          const call=priceH('call'),put=priceH('put');
+          const feller=2*kappa*theta/(vov*vov);
+
+          // Smile: price at different strikes
+          const moneys=[0.85,0.90,0.95,1.0,1.05,1.10,1.15];
+          const smile=moneys.map(m=>{
+            const K2=spot*m;
+            let sm=0;
+            for(let i=0;i<Math.min(N,8000);i++){
+              let S2=spot,v2=v0;
+              for(let t=0;t<steps;t++){
+                const z1=randn(),z2p=randn();
+                const z2=rho*z1+Math.sqrt(1-rho*rho)*z2p;
+                const vp=Math.max(v2,0),sv=Math.sqrt(vp);
+                S2=S2*Math.exp((rate-0.5*vp)*dt+sv*Math.sqrt(dt)*z1);
+                v2=v2+kappa*(theta-vp)*dt+vov*sv*Math.sqrt(dt)*z2;
+              }
+              sm+=Math.max(S2-K2,0);
+            }
+            const cp=disc*sm/Math.min(N,8000);
+            // Bisection IV
+            let lo=0.01,hi=2.0;
+            for(let it=0;it<80;it++){
+              const mid=(lo+hi)/2;
+              const bsp=bsPrice(spot,K2,rate,mid,maturity,'call');
+              if(bsp<cp)lo=mid;else hi=mid;
+            }
+            return{moneyness:m,strike:K2,iv:(lo+hi)/2};
+          });
+
+          setHRes({call,put,feller,fellerOk:feller>1,smile});
+          setHBusy(false);
+          gsap.fromTo('.heston-result',{y:15,opacity:0},{y:0,opacity:1,duration:0.5,ease:'back.out(1.4)'});
+        },30);
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1.5rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Heston Stochastic Volatility</span><div className="sdot"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--muted)',margin:'0.4rem 0 0.6rem',lineHeight:'1.5'}}>
+            dS = r·S·dt + √v·S·dW₁ &nbsp;|&nbsp; dv = κ(θ−v)dt + σᵥ·√v·dW₂ &nbsp;|&nbsp; Corr = ρ
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:'0.5rem',marginBottom:'0.6rem'}}>
+            <div style={{display:'flex',flexDirection:'column',gap:'0.15rem'}}>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)',letterSpacing:'0.08em'}}>KAPPA (κ)</span>
+              <input type="range" min="0.5" max="10" step="0.1" value={kappa} onChange={e=>setKappa(+e.target.value)} style={{accentColor:'var(--accent)'}}/>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.55rem',color:'var(--text)',textAlign:'center'}}>{kappa.toFixed(1)}</span>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:'0.15rem'}}>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)',letterSpacing:'0.08em'}}>THETA (θ)</span>
+              <input type="range" min="0.01" max="0.20" step="0.005" value={theta} onChange={e=>setTheta(+e.target.value)} style={{accentColor:'#00d4ff'}}/>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.55rem',color:'var(--text)',textAlign:'center'}}>{(Math.sqrt(theta)*100).toFixed(0)}% vol</span>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:'0.15rem'}}>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)',letterSpacing:'0.08em'}}>VOL OF VOL (σᵥ)</span>
+              <input type="range" min="0.05" max="1.5" step="0.05" value={vov} onChange={e=>setVov(+e.target.value)} style={{accentColor:'#a855f7'}}/>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.55rem',color:'var(--text)',textAlign:'center'}}>{vov.toFixed(2)}</span>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:'0.15rem'}}>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)',letterSpacing:'0.08em'}}>RHO (ρ)</span>
+              <input type="range" min="-0.95" max="0.95" step="0.05" value={rho} onChange={e=>setRho(+e.target.value)} style={{accentColor:'#ec4899'}}/>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.55rem',color:rho<0?'#f97316':'#00ff88',textAlign:'center'}}>{rho.toFixed(2)}</span>
+            </div>
+          </div>
+          <button className="run-btn" style={{fontSize:'0.6rem',padding:'0.5rem 1.2rem'}} onClick={runHeston} disabled={hBusy}>
+            {hBusy?'SIMULATING...':'RUN HESTON MODEL'}
+          </button>
+          {hRes&&(
+            <div className="heston-result" style={{marginTop:'0.7rem'}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.5rem'}}>
+                <div className="opt-card">
+                  <div className="opt-type" style={{fontSize:'0.52rem'}}>HESTON CALL</div>
+                  <div className="opt-price call" style={{fontSize:'1rem'}}>{cur}{hRes.call.price.toFixed(4)}</div>
+                  <div className="opt-se">SE: {cur}{hRes.call.se.toFixed(5)}</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:hRes.call.premium>0?'#f97316':'#00ff88',marginTop:'0.1rem'}}>
+                    vs GBM: {hRes.call.premium>0?'+':''}{cur}{hRes.call.premium.toFixed(4)}
+                  </div>
+                </div>
+                <div className="opt-card">
+                  <div className="opt-type" style={{fontSize:'0.52rem'}}>HESTON PUT</div>
+                  <div className="opt-price put" style={{fontSize:'1rem'}}>{cur}{hRes.put.price.toFixed(4)}</div>
+                  <div className="opt-se">SE: {cur}{hRes.put.se.toFixed(5)}</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:hRes.put.premium>0?'#f97316':'#00ff88',marginTop:'0.1rem'}}>
+                    vs GBM: {hRes.put.premium>0?'+':''}{cur}{hRes.put.premium.toFixed(4)}
+                  </div>
+                </div>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.3rem',marginTop:'0.5rem'}}>
+                <div style={{background:'rgba(0,255,136,0.06)',border:'1px solid rgba(0,255,136,0.12)',borderRadius:'6px',padding:'0.4rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)',letterSpacing:'0.1em'}}>FELLER RATIO</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.75rem',color:hRes.fellerOk?'#00ff88':'#f97316',marginTop:'0.1rem'}}>{hRes.feller.toFixed(2)}</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.38rem',color:'var(--muted)'}}>{hRes.fellerOk?'2κθ/σᵥ² > 1 ✓':'WARNING: < 1'}</div>
+                </div>
+                <div style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.12)',borderRadius:'6px',padding:'0.4rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)',letterSpacing:'0.1em'}}>LONG-RUN VOL</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.75rem',color:'#00d4ff',marginTop:'0.1rem'}}>{(Math.sqrt(theta)*100).toFixed(1)}%</div>
+                </div>
+                <div style={{background:'rgba(236,72,153,0.06)',border:'1px solid rgba(236,72,153,0.12)',borderRadius:'6px',padding:'0.4rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)',letterSpacing:'0.1em'}}>SPOT-VOL CORR</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.75rem',color:'#ec4899',marginTop:'0.1rem'}}>{rho.toFixed(2)}</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.38rem',color:'var(--muted)'}}>{rho<-0.3?'leverage effect':rho>0.3?'inverse leverage':'weak corr'}</div>
+                </div>
+              </div>
+              {/* Heston IV Smile */}
+              <div style={{marginTop:'0.6rem'}}>
+                <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--accent)',letterSpacing:'0.15em',marginBottom:'0.3rem'}}>HESTON IMPLIED VOLATILITY SMILE</div>
+                <table style={{width:'100%',borderCollapse:'collapse',fontFamily:'JetBrains Mono',fontSize:'0.48rem'}}>
+                  <thead>
+                    <tr style={{borderBottom:'1px solid var(--border)'}}>
+                      <th style={{padding:'0.2rem',textAlign:'left',color:'var(--muted)'}}>Moneyness</th>
+                      <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>Strike</th>
+                      <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>Impl Vol</th>
+                      <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>Skew</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {hRes.smile.map((row,i)=>{
+                      const atmIv=hRes.smile.find(s=>s.moneyness===1.0)?.iv||vol;
+                      const skew=row.iv-atmIv;
+                      return(
+                        <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)',background:row.moneyness===1.0?'rgba(0,255,136,0.04)':'transparent'}}>
+                          <td style={{padding:'0.2rem',color:row.moneyness<1?'#f97316':row.moneyness>1?'#00d4ff':'var(--accent)'}}>{(row.moneyness*100).toFixed(0)}%</td>
+                          <td style={{padding:'0.2rem',textAlign:'right',color:'var(--text)'}}>{cur}{row.strike.toFixed(1)}</td>
+                          <td style={{padding:'0.2rem',textAlign:'right',color:'#a855f7'}}>{(row.iv*100).toFixed(1)}%</td>
+                          <td style={{padding:'0.2rem',textAlign:'right',color:skew>0.005?'#f97316':skew<-0.005?'#00ff88':'var(--muted)'}}>{skew>0?'+':''}{(skew*100).toFixed(1)}%</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
+       YIELD CURVE PANEL
+    ═══════════════════════════════════════════════════ */
+    function YieldCurvePanel({params,currency}){
+      const{rate}=params;
+      const cur=currency;
+      const[curveModel,setCurveModel]=useState('nelson-siegel');
+      const[ycRes,setYcRes]=useState(null);
+      const chartRef=useRef(null);
+      const chartInst=useRef(null);
+
+      const runYC=()=>{
+        // Nelson-Siegel computation in JS
+        const ns=(T,b0,b1,b2,tau)=>{
+          const x=T/tau;
+          const f1=(1-Math.exp(-x))/x;
+          const f2=f1-Math.exp(-x);
+          return b0+b1*f1+b2*f2;
+        };
+        const mats=[];
+        for(let t=0.1;t<=30;t+=0.6) mats.push(t);
+
+        let rates,fwds;
+        if(curveModel==='flat'){
+          rates=mats.map(()=>rate);
+        }else if(curveModel==='nelson-siegel'){
+          rates=mats.map(t=>ns(t,rate,-0.02,0.03,1.5));
+        }else if(curveModel==='inverted'){
+          rates=mats.map(t=>ns(t,rate-0.01,0.03,-0.02,1.0));
+        }else{
+          rates=mats.map(t=>ns(t,rate+0.02,-0.04,0.05,2.0));
+        }
+        // Forward rates
+        fwds=[rates[0]];
+        for(let i=1;i<mats.length;i++){
+          const dt=mats[i]-mats[i-1];
+          fwds.push((rates[i]*mats[i]-rates[i-1]*mats[i-1])/dt);
+        }
+        const dfs=mats.map((t,i)=>Math.exp(-rates[i]*t));
+
+        setYcRes({mats,rates,fwds,dfs});
+
+        // Draw chart
+        setTimeout(()=>{
+          if(!chartRef.current)return;
+          if(chartInst.current)chartInst.current.destroy();
+          chartInst.current=new Chart(chartRef.current,{
+            type:'line',
+            data:{
+              labels:mats.map(t=>t.toFixed(1)+'Y'),
+              datasets:[
+                {label:'Spot Rate',data:rates.map(r=>r*100),borderColor:'#00ff88',backgroundColor:'rgba(0,255,136,0.08)',fill:true,tension:0.3,pointRadius:0,borderWidth:1.5},
+                {label:'Forward Rate',data:fwds.map(r=>r*100),borderColor:'#f97316',backgroundColor:'transparent',fill:false,tension:0.3,pointRadius:0,borderWidth:1,borderDash:[4,3]},
+              ],
+            },
+            options:{
+              responsive:true,maintainAspectRatio:false,
+              plugins:{legend:{labels:{color:'rgba(255,255,255,0.5)',font:{family:'JetBrains Mono',size:8}}}},
+              scales:{
+                x:{ticks:{color:'rgba(255,255,255,0.3)',font:{family:'JetBrains Mono',size:7},maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.04)'}},
+                y:{ticks:{color:'rgba(255,255,255,0.3)',font:{family:'JetBrains Mono',size:7},callback:v=>v.toFixed(1)+'%'},grid:{color:'rgba(255,255,255,0.06)'}},
+              },
+            },
+          });
+        },50);
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1.5rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Yield Curve / Term Structure</span><div className="sdot"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--muted)',margin:'0.4rem 0 0.5rem',lineHeight:'1.5'}}>
+            Nelson-Siegel term structure model: r(T) = β₀ + β₁·f₁(T/τ) + β₂·f₂(T/τ)
+          </div>
+          <div style={{display:'flex',gap:'0.4rem',flexWrap:'wrap',margin:'0 0 0.6rem'}}>
+            {[['flat','FLAT'],['nelson-siegel','NELSON-SIEGEL'],['inverted','INVERTED'],['steep','STEEP']].map(([k,l])=>(
+              <button key={k} className={'method-btn'+(curveModel===k?' active':'')} style={{fontSize:'0.5rem',padding:'0.25rem 0.5rem'}} onClick={()=>setCurveModel(k)}>{l}</button>
+            ))}
+          </div>
+          <button className="run-btn" style={{fontSize:'0.6rem',padding:'0.5rem 1.2rem'}} onClick={runYC}>
+            GENERATE CURVE
+          </button>
+          {ycRes&&(
+            <div style={{marginTop:'0.7rem'}}>
+              <div style={{height:'180px',marginBottom:'0.5rem'}}><canvas ref={chartRef}/></div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'0.3rem'}}>
+                {[
+                  ['3M RATE',ycRes.rates[Math.floor(ycRes.mats.findIndex(t=>t>=0.25))],'#00ff88'],
+                  ['1Y RATE',ycRes.rates[Math.floor(ycRes.mats.findIndex(t=>t>=1.0))],'#00d4ff'],
+                  ['5Y RATE',ycRes.rates[Math.floor(ycRes.mats.findIndex(t=>t>=5.0))],'#a855f7'],
+                  ['10Y RATE',ycRes.rates[Math.floor(ycRes.mats.findIndex(t=>t>=10.0))],'#f97316'],
+                ].map(([label,val,col])=>(
+                  <div key={label} style={{background:`${col}0F`,border:`1px solid ${col}20`,borderRadius:'6px',padding:'0.35rem',textAlign:'center'}}>
+                    <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)',letterSpacing:'0.1em'}}>{label}</div>
+                    <div style={{fontFamily:'JetBrains Mono',fontSize:'0.7rem',color:col,marginTop:'0.1rem'}}>{val!=null?(val*100).toFixed(2)+'%':'—'}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{marginTop:'0.4rem',fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)'}}>
+                Spread (10Y−3M): {ycRes.rates[Math.floor(ycRes.mats.findIndex(t=>t>=10.0))]!=null&&ycRes.rates[Math.floor(ycRes.mats.findIndex(t=>t>=0.25))]!=null?
+                  ((ycRes.rates[Math.floor(ycRes.mats.findIndex(t=>t>=10.0))]-ycRes.rates[Math.floor(ycRes.mats.findIndex(t=>t>=0.25))])*10000).toFixed(0)+'bp':'—'}
+                &nbsp;|&nbsp; Model: {curveModel}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
        REGION SELECTOR
     ═══════════════════════════════════════════════════ */
     function RegionSelector({onSelect}){
@@ -2724,6 +3013,10 @@
               <JumpDiffusionPanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── MONTE CARLO GREEKS ──</div>
               <MCGreeksPanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── HESTON STOCHASTIC VOLATILITY ──</div>
+              <HestonPanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── YIELD CURVE ──</div>
+              <YieldCurvePanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── PORTFOLIO RISK ──</div>
               <PortfolioPanel region={region} currency={cur}/>
             </>

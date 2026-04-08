@@ -21,5 +21,7 @@ from .greeks import compute_greeks, compute_greeks_both
 from .jump_diffusion import simulate_jump_diffusion
 from .mc_greeks import mc_greeks
 from .american import price_american
+from .heston import price_heston, heston_smile
+from .yield_curve import generate_yield_curve, price_with_term_structure
 
-__version__ = "2.1.0"
+__version__ = "2.2.0"

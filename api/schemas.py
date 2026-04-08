@@ -127,3 +127,27 @@ class AmericanRequest(BaseModel):
     option_type: Literal["call", "put"] = "put"
     n_simulations: int = Field(50000, gt=0, le=500000)
     n_steps: int = Field(100, gt=0, le=500)
+
+
+class HestonRequest(BaseModel):
+    """Request for Heston stochastic volatility pricing."""
+    spot: float = Field(..., gt=0)
+    strike: float = Field(..., gt=0)
+    rate: float
+    volatility: float = Field(..., gt=0)
+    maturity: float = Field(..., gt=0)
+    option_type: Literal["call", "put"] = "call"
+    n_simulations: int = Field(50000, gt=0, le=500000)
+    n_steps: int = Field(200, gt=0, le=1000)
+    kappa: float = Field(2.0, gt=0, description="Mean reversion speed")
+    theta: float = Field(0.04, gt=0, description="Long-run variance")
+    vol_of_vol: float = Field(0.3, gt=0, description="Vol of vol (σ_v)")
+    rho: float = Field(-0.7, ge=-1, le=1, description="Spot-vol correlation")
+
+
+class YieldCurveRequest(BaseModel):
+    """Request to generate yield curve."""
+    model: Literal["flat", "nelson-siegel", "inverted", "steep"] = "nelson-siegel"
+    rate: float = Field(0.05)
+    n_points: int = Field(50, gt=5, le=200)
+    max_maturity: float = Field(30.0, gt=1)
