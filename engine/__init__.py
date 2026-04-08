@@ -24,5 +24,7 @@ from .american import price_american
 from .heston import price_heston, heston_smile
 from .yield_curve import generate_yield_curve, price_with_term_structure
 from .sabr import sabr_implied_vol, sabr_smile, sabr_surface
+from .variance_swap import price_variance_swap
+from .greeks_surface import greeks_surface_spot_time, greeks_surface_spot_vol
 
-__version__ = "2.3.0"
+__version__ = "2.4.0"

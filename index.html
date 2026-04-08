@@ -3513,6 +3513,196 @@
     }
 
     /* ═══════════════════════════════════════════════════
+       VARIANCE SWAP PANEL
+    ═══════════════════════════════════════════════════ */
+    function VarianceSwapPanel({params,currency}){
+      const{spot,rate,vol,maturity,n}=params;
+      const cur=currency;
+      const[vsRes,setVsRes]=useState(null);
+      const[vsBusy,setVsBusy]=useState(false);
+
+      const run=()=>{
+        setVsBusy(true);
+        setTimeout(()=>{
+          // Simulate realized variance via MC
+          const N=Math.min(n,20000),steps=252,dt=maturity/steps;
+          const realizedVars=[];
+          for(let i=0;i<N;i++){
+            let s=spot,sumLogRet2=0;
+            for(let t=0;t<steps;t++){
+              const z=randn();
+              const sNew=s*Math.exp((rate-0.5*vol*vol)*dt+vol*Math.sqrt(dt)*z);
+              const logRet=Math.log(sNew/s);
+              sumLogRet2+=logRet*logRet;
+              s=sNew;
+            }
+            realizedVars.push(sumLogRet2/maturity);
+          }
+          const fairVar=realizedVars.reduce((a,b)=>a+b,0)/N;
+          const fairVol=Math.sqrt(fairVar);
+          const impliedVar=vol*vol;
+          const vrp=fairVar-impliedVar;
+          // Scenarios
+          const scenarios=[10,15,20,25,30,35,40,50].map(rv=>{
+            const realVar=(rv/100)**2;
+            const pnl=1e6/(2*fairVol)*(realVar-fairVar)*100;
+            return{rv,realVar,pnl};
+          });
+          // Distribution stats
+          const sorted=[...realizedVars].sort((a,b)=>a-b);
+          const p5=sorted[Math.floor(N*0.05)],p95=sorted[Math.floor(N*0.95)];
+
+          setVsRes({fairVar,fairVol,impliedVar,vrp,scenarios,p5,p95});
+          setVsBusy(false);
+          gsap.fromTo('.vs-result',{y:15,opacity:0},{y:0,opacity:1,duration:0.5,ease:'back.out(1.4)'});
+        },30);
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1.5rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Variance Swap</span><div className="sdot"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--muted)',margin:'0.4rem 0 0.6rem',lineHeight:'1.5'}}>
+            Fair variance swap strike via MC. Payoff = Notional × (σ²_realized − K_var). Captures variance risk premium.
+          </div>
+          <button className="run-btn" style={{fontSize:'0.6rem',padding:'0.5rem 1.2rem'}} onClick={run} disabled={vsBusy}>
+            {vsBusy?'COMPUTING...':'PRICE VARIANCE SWAP'}
+          </button>
+          {vsRes&&(
+            <div className="vs-result" style={{marginTop:'0.7rem'}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'0.3rem',marginBottom:'0.5rem'}}>
+                <div style={{background:'rgba(0,255,136,0.06)',border:'1px solid rgba(0,255,136,0.12)',borderRadius:'6px',padding:'0.4rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>FAIR VOL</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.75rem',color:'#00ff88',marginTop:'0.1rem'}}>{(vsRes.fairVol*100).toFixed(2)}%</div>
+                </div>
+                <div style={{background:'rgba(249,115,22,0.06)',border:'1px solid rgba(249,115,22,0.12)',borderRadius:'6px',padding:'0.4rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>IMPLIED VOL</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.75rem',color:'#f97316',marginTop:'0.1rem'}}>{(vol*100).toFixed(1)}%</div>
+                </div>
+                <div style={{background:'rgba(168,85,247,0.06)',border:'1px solid rgba(168,85,247,0.12)',borderRadius:'6px',padding:'0.4rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>VAR RISK PREMIUM</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.75rem',color:'#a855f7',marginTop:'0.1rem'}}>{(vsRes.vrp*10000).toFixed(1)}bp²</div>
+                </div>
+                <div style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.12)',borderRadius:'6px',padding:'0.4rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>RV 90% RANGE</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.6rem',color:'#00d4ff',marginTop:'0.1rem'}}>{(Math.sqrt(vsRes.p5)*100).toFixed(1)}–{(Math.sqrt(vsRes.p95)*100).toFixed(1)}%</div>
+                </div>
+              </div>
+              <div style={{fontFamily:'JetBrains Mono',fontSize:'0.45rem',color:'var(--accent)',letterSpacing:'0.12em',marginBottom:'0.25rem'}}>P&L SCENARIOS (1M VEGA NOTIONAL)</div>
+              <table style={{width:'100%',borderCollapse:'collapse',fontFamily:'JetBrains Mono',fontSize:'0.46rem'}}>
+                <thead>
+                  <tr style={{borderBottom:'1px solid var(--border)'}}>
+                    <th style={{padding:'0.2rem',textAlign:'left',color:'var(--muted)'}}>Realized Vol</th>
+                    <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>Realized Var</th>
+                    <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>Long Swap P&L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vsRes.scenarios.map((s,i)=>(
+                    <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                      <td style={{padding:'0.2rem',color:'var(--text)'}}>{s.rv}%</td>
+                      <td style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>{(s.realVar*10000).toFixed(0)}bp²</td>
+                      <td style={{padding:'0.2rem',textAlign:'right',color:s.pnl>0?'#00ff88':'#ef4444'}}>{s.pnl>0?'+':''}{cur}{(s.pnl/1000).toFixed(1)}K</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
+       GREEKS HEATMAP PANEL
+    ═══════════════════════════════════════════════════ */
+    function GreeksHeatmapPanel({params,currency}){
+      const{spot,strike,rate,vol,maturity}=params;
+      const cur=currency;
+      const[greek,setGreek]=useState('delta');
+      const[hmRes,setHmRes]=useState(null);
+
+      const run=()=>{
+        const nSpot=12,nTime=10;
+        const spots=[];
+        for(let i=0;i<nSpot;i++) spots.push(spot*0.7+spot*0.6*i/(nSpot-1));
+        const times=[];
+        for(let i=0;i<nTime;i++) times.push(0.05+1.95*i/(nTime-1));
+
+        const grids={delta:[],gamma:[],vega:[],theta:[]};
+        for(let ti=0;ti<nTime;ti++){
+          const dRow=[],gRow=[],vRow=[],tRow=[];
+          for(let si=0;si<nSpot;si++){
+            const g=bsGreeks(spots[si],strike,rate,vol,times[ti]);
+            if(g){
+              dRow.push(g.callDelta);
+              gRow.push(g.gamma);
+              vRow.push(g.vega);
+              tRow.push(g.callTheta);
+            }else{
+              dRow.push(0);gRow.push(0);vRow.push(0);tRow.push(0);
+            }
+          }
+          grids.delta.push(dRow);
+          grids.gamma.push(gRow);
+          grids.vega.push(vRow);
+          grids.theta.push(tRow);
+        }
+        setHmRes({grids,spots,times});
+        gsap.fromTo('.hm-result',{y:15,opacity:0},{y:0,opacity:1,duration:0.5,ease:'back.out(1.4)'});
+      };
+
+      const heatColor=(val,min2,max2)=>{
+        const t2=max2-min2>0?(val-min2)/(max2-min2):0.5;
+        const r=Math.round(255*Math.max(0,Math.min(1,2*t2-1)));
+        const g=Math.round(255*Math.max(0,Math.min(1,2*(1-t2)-0)));
+        const b=Math.round(80*(1-Math.abs(2*t2-1)));
+        return`rgba(${r},${g},${b},0.5)`;
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1.5rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Greeks Heatmap</span><div className="sdot"/></div>
+          <div style={{display:'flex',gap:'0.4rem',margin:'0.5rem 0'}}>
+            {['delta','gamma','vega','theta'].map(g=>(
+              <button key={g} className={'method-btn'+(greek===g?' active':'')} style={{fontSize:'0.5rem',padding:'0.2rem 0.5rem'}} onClick={()=>setGreek(g)}>{g.toUpperCase()}</button>
+            ))}
+          </div>
+          <button className="run-btn" style={{fontSize:'0.6rem',padding:'0.5rem 1.2rem'}} onClick={run}>GENERATE HEATMAP</button>
+          {hmRes&&(
+            <div className="hm-result" style={{marginTop:'0.7rem',overflowX:'auto'}}>
+              <div style={{fontFamily:'JetBrains Mono',fontSize:'0.45rem',color:'var(--accent)',letterSpacing:'0.1em',marginBottom:'0.3rem'}}>{greek.toUpperCase()} — SPOT × TIME</div>
+              <table style={{borderCollapse:'collapse',fontFamily:'JetBrains Mono',fontSize:'0.38rem'}}>
+                <thead>
+                  <tr>
+                    <th style={{padding:'0.15rem 0.3rem',color:'var(--muted)'}}>S \ T</th>
+                    {hmRes.times.map((t,i)=><th key={i} style={{padding:'0.15rem 0.25rem',color:'var(--muted)'}}>{t.toFixed(2)}y</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {hmRes.spots.map((s,si)=>{
+                    const grid=hmRes.grids[greek];
+                    const vals=grid.map(row=>row[si]);
+                    const allVals=grid.flat();
+                    const mn=Math.min(...allVals),mx=Math.max(...allVals);
+                    return(
+                      <tr key={si}>
+                        <td style={{padding:'0.15rem 0.3rem',color:'var(--accent)',fontWeight:600}}>{cur}{s.toFixed(0)}</td>
+                        {hmRes.times.map((t,ti)=>{
+                          const v=grid[ti][si];
+                          return <td key={ti} style={{padding:'0.1rem 0.2rem',textAlign:'center',background:heatColor(v,mn,mx),borderRadius:'2px',color:'rgba(255,255,255,0.8)'}}>{v.toFixed(greek==='gamma'?5:4)}</td>;
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
        REGION SELECTOR
     ═══════════════════════════════════════════════════ */
     function RegionSelector({onSelect}){
@@ -3778,6 +3968,10 @@
               <SABRPanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── GBM PATH VISUALIZATION ──</div>
               <PathVisPanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── VARIANCE SWAP ──</div>
+              <VarianceSwapPanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── GREEKS HEATMAP ──</div>
+              <GreeksHeatmapPanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── PORTFOLIO RISK ──</div>
               <PortfolioPanel region={region} currency={cur}/>
             </>
