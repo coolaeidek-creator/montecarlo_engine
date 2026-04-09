@@ -3925,6 +3925,141 @@
     }
 
     /* ═══════════════════════════════════════════════════
+       DELTA HEDGING PANEL
+    ═══════════════════════════════════════════════════ */
+    function DeltaHedgePanel({params,currency}){
+      const{spot,strike,rate,vol,maturity}=params;
+      const cur=currency;
+      const[freq,setFreq]=useState(1);
+      const[dhRes,setDhRes]=useState(null);
+      const[dhBusy,setDhBusy]=useState(false);
+
+      const run=()=>{
+        setDhBusy(true);
+        setTimeout(()=>{
+          const nSims=500,nDays=252,dt=maturity/nDays;
+          const premium=bsPrice(spot,strike,rate,vol,maturity,'call');
+          // Simulate hedge P&Ls for multiple frequencies
+          const freqs=[{f:1,l:'Daily'},{f:2,l:'2-Day'},{f:5,l:'Weekly'},{f:10,l:'Bi-Weekly'},{f:21,l:'Monthly'}];
+          const results=freqs.map(({f,l})=>{
+            const pnls=[];
+            for(let sim=0;sim<nSims;sim++){
+              let S=spot,cash=premium,shares=0;
+              for(let day=0;day<nDays;day++){
+                const tLeft=maturity-day*dt;
+                if(tLeft<=0)break;
+                if(day%f===0){
+                  const g=bsGreeks(S,strike,rate,vol,tLeft);
+                  const newDelta=g?g.callDelta:0;
+                  cash-=(newDelta-shares)*S;
+                  shares=newDelta;
+                }
+                const z=randn();
+                S=S*Math.exp((rate-0.5*vol*vol)*dt+vol*Math.sqrt(dt)*z);
+                cash*=Math.exp(rate*dt);
+              }
+              cash+=shares*S;
+              cash-=Math.max(S-strike,0);
+              pnls.push(cash);
+            }
+            const mean=pnls.reduce((a,b)=>a+b,0)/nSims;
+            const std=Math.sqrt(pnls.reduce((a,b)=>a+(b-mean)**2,0)/nSims);
+            return{freq:l,days:f,mean,std,eff:1-std/premium};
+          });
+          setDhRes({results,premium});
+          setDhBusy(false);
+          gsap.fromTo('.dh-result',{y:15,opacity:0},{y:0,opacity:1,duration:0.5,ease:'back.out(1.4)'});
+        },30);
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1.5rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Delta Hedging Simulation</span><div className="sdot"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--muted)',margin:'0.4rem 0 0.6rem',lineHeight:'1.5'}}>
+            Sell a call at BS price, delta hedge dynamically. Shows how rebalancing frequency affects hedge P&L. Perfect hedge → P&L ≈ 0.
+          </div>
+          <button className="run-btn" style={{fontSize:'0.6rem',padding:'0.5rem 1.2rem'}} onClick={run} disabled={dhBusy}>
+            {dhBusy?'SIMULATING 2500 HEDGES...':'RUN HEDGE SIMULATION'}
+          </button>
+          {dhRes&&(
+            <div className="dh-result" style={{marginTop:'0.7rem'}}>
+              <div style={{fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)',marginBottom:'0.3rem'}}>
+                Premium received: {cur}{dhRes.premium.toFixed(3)} · 500 simulations per frequency
+              </div>
+              <table style={{width:'100%',borderCollapse:'collapse',fontFamily:'JetBrains Mono',fontSize:'0.48rem'}}>
+                <thead>
+                  <tr style={{borderBottom:'1px solid var(--border)'}}>
+                    <th style={{padding:'0.25rem',textAlign:'left',color:'var(--muted)'}}>Frequency</th>
+                    <th style={{padding:'0.25rem',textAlign:'right',color:'var(--muted)'}}>Mean P&L</th>
+                    <th style={{padding:'0.25rem',textAlign:'right',color:'var(--muted)'}}>Std P&L</th>
+                    <th style={{padding:'0.25rem',textAlign:'right',color:'var(--muted)'}}>Hedge Eff.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dhRes.results.map((r,i)=>(
+                    <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                      <td style={{padding:'0.25rem',color:'var(--text)'}}>{r.freq}</td>
+                      <td style={{padding:'0.25rem',textAlign:'right',color:Math.abs(r.mean)<1?'#00ff88':'#f97316'}}>{r.mean>0?'+':''}{cur}{r.mean.toFixed(3)}</td>
+                      <td style={{padding:'0.25rem',textAlign:'right',color:'var(--text)'}}>{cur}{r.std.toFixed(3)}</td>
+                      <td style={{padding:'0.25rem',textAlign:'right'}}>
+                        <span style={{color:r.eff>0.8?'#00ff88':r.eff>0.5?'#f97316':'#ef4444'}}>{(r.eff*100).toFixed(1)}%</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {/* Visual efficiency bars */}
+              <div style={{marginTop:'0.5rem'}}>
+                {dhRes.results.map((r,i)=>(
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:'0.4rem',marginBottom:'0.15rem'}}>
+                    <span style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)',width:'60px',textAlign:'right'}}>{r.freq}</span>
+                    <div style={{flex:1,height:'8px',background:'rgba(255,255,255,0.05)',borderRadius:'4px',overflow:'hidden'}}>
+                      <div style={{width:Math.max(0,r.eff*100)+'%',height:'100%',background:r.eff>0.8?'#00ff88':r.eff>0.5?'#f97316':'#ef4444',borderRadius:'4px',transition:'width 0.5s'}}/>
+                    </div>
+                    <span style={{fontFamily:'JetBrains Mono',fontSize:'0.38rem',color:'var(--muted)',width:'35px'}}>{(r.eff*100).toFixed(0)}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
+       ENGINE FOOTER
+    ═══════════════════════════════════════════════════ */
+    function EngineFooter(){
+      return(
+        <div style={{marginTop:'3rem',paddingTop:'1.5rem',borderTop:'1px solid rgba(255,255,255,0.06)',textAlign:'center'}}>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.6rem',color:'var(--accent)',letterSpacing:'0.2em',marginBottom:'0.4rem'}}>
+            MONTE CARLO ENGINE v3.0
+          </div>
+          <div style={{display:'flex',justifyContent:'center',gap:'1.5rem',flexWrap:'wrap',marginBottom:'0.5rem'}}>
+            {[
+              ['20','Engine Modules'],['34','Interactive Panels'],['184+','Unit Tests'],
+              ['8','Pricing Models'],['5','MC Methods'],['40','Global Stocks'],
+              ['4','Regions'],['20','API Endpoints'],
+            ].map(([n,l])=>(
+              <div key={l} style={{textAlign:'center'}}>
+                <div style={{fontFamily:'JetBrains Mono',fontSize:'0.7rem',color:'var(--accent)'}}>{n}</div>
+                <div style={{fontFamily:'JetBrains Mono',fontSize:'0.38rem',color:'var(--muted)',letterSpacing:'0.08em'}}>{l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)',lineHeight:'1.6'}}>
+            Models: Black-Scholes · Monte Carlo (5 methods) · Binomial Tree · Heston SV · SABR · Merton Jump-Diffusion · Longstaff-Schwartz LSM
+            <br/>Features: Greeks · Exotic Options · Risk Metrics · Implied Vol · Vol Surface · Yield Curve · Delta Hedging · Variance Swaps
+            <br/>Built with React 18 · Three.js · Chart.js · GSAP · Python FastAPI
+          </div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.35rem',color:'rgba(255,255,255,0.15)',marginTop:'0.6rem',letterSpacing:'0.15em'}}>
+            QUANTITATIVE FINANCE · STOCHASTIC CALCULUS · RISK MANAGEMENT
+          </div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
        REGION SELECTOR
     ═══════════════════════════════════════════════════ */
     function RegionSelector({onSelect}){
@@ -4198,8 +4333,11 @@
               <HistVolPanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── BINOMIAL TREE ──</div>
               <BinomialPanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── DELTA HEDGING ──</div>
+              <DeltaHedgePanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── PORTFOLIO RISK ──</div>
               <PortfolioPanel region={region} currency={cur}/>
+              <EngineFooter/>
             </>
           )}
         </>

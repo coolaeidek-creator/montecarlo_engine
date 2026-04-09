@@ -28,5 +28,6 @@ from .variance_swap import price_variance_swap
 from .greeks_surface import greeks_surface_spot_time, greeks_surface_spot_vol
 from .historical_vol import close_to_close_vol, ewma_vol
 from .binomial import price_binomial, binomial_convergence
+from .delta_hedge import simulate_delta_hedge, compare_hedge_frequencies
 
-__version__ = "2.5.0"
+__version__ = "3.0.0"
