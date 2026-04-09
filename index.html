@@ -3703,6 +3703,228 @@
     }
 
     /* ═══════════════════════════════════════════════════
+       HISTORICAL VOL PANEL
+    ═══════════════════════════════════════════════════ */
+    function HistVolPanel({params,currency}){
+      const{spot,rate,vol}=params;
+      const cur=currency;
+      const[hvRes,setHvRes]=useState(null);
+
+      const run=()=>{
+        // Generate synthetic price series
+        const nDays=252,dt=1/252;
+        const closes=[spot];
+        let s=spot;
+        for(let i=0;i<nDays;i++){
+          s*=Math.exp((rate-0.5*vol*vol)*dt+vol*Math.sqrt(dt)*randn());
+          closes.push(s);
+        }
+        // Close-to-close vol
+        const logRet=[];
+        for(let i=1;i<closes.length;i++) logRet.push(Math.log(closes[i]/closes[i-1]));
+        const mean=logRet.reduce((a,b)=>a+b,0)/logRet.length;
+        const variance=logRet.reduce((a,b)=>a+(b-mean)**2,0)/(logRet.length-1);
+        const ccVol=Math.sqrt(variance*252);
+        // Rolling 20-day vol
+        const rolling=[];
+        for(let i=20;i<logRet.length;i++){
+          const w=logRet.slice(i-20,i);
+          const m=w.reduce((a,b)=>a+b,0)/20;
+          const v=w.reduce((a,b)=>a+(b-m)**2,0)/19;
+          rolling.push(Math.sqrt(v*252));
+        }
+        // EWMA vol (lambda=0.94)
+        const ewma=[logRet[0]**2*252];
+        let ewVar=logRet[0]**2;
+        for(let i=1;i<logRet.length;i++){
+          ewVar=0.94*ewVar+0.06*logRet[i]**2;
+          ewma.push(Math.sqrt(ewVar*252));
+        }
+        // Vol of vol
+        const volOfVol=rolling.length>1?Math.sqrt(rolling.reduce((a,b)=>a+(b-rolling.reduce((x,y)=>x+y,0)/rolling.length)**2,0)/(rolling.length-1)):0;
+
+        setHvRes({ccVol,rolling,ewma,closes,volOfVol,currentEwma:ewma[ewma.length-1]});
+        gsap.fromTo('.hv-result',{y:15,opacity:0},{y:0,opacity:1,duration:0.5,ease:'back.out(1.4)'});
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1.5rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Historical Volatility</span><div className="sdot"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--muted)',margin:'0.4rem 0 0.6rem'}}>
+            Simulates 252 trading days and computes realized vol via multiple estimators: close-to-close, 20-day rolling, EWMA (λ=0.94).
+          </div>
+          <button className="run-btn" style={{fontSize:'0.6rem',padding:'0.5rem 1.2rem'}} onClick={run}>ESTIMATE HISTORICAL VOL</button>
+          {hvRes&&(
+            <div className="hv-result" style={{marginTop:'0.7rem'}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'0.3rem',marginBottom:'0.5rem'}}>
+                <div style={{background:'rgba(0,255,136,0.06)',border:'1px solid rgba(0,255,136,0.12)',borderRadius:'6px',padding:'0.4rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>CLOSE-TO-CLOSE</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.75rem',color:'#00ff88',marginTop:'0.1rem'}}>{(hvRes.ccVol*100).toFixed(1)}%</div>
+                </div>
+                <div style={{background:'rgba(249,115,22,0.06)',border:'1px solid rgba(249,115,22,0.12)',borderRadius:'6px',padding:'0.4rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>EWMA (CURRENT)</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.75rem',color:'#f97316',marginTop:'0.1rem'}}>{(hvRes.currentEwma*100).toFixed(1)}%</div>
+                </div>
+                <div style={{background:'rgba(168,85,247,0.06)',border:'1px solid rgba(168,85,247,0.12)',borderRadius:'6px',padding:'0.4rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>VOL OF VOL</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.75rem',color:'#a855f7',marginTop:'0.1rem'}}>{(hvRes.volOfVol*100).toFixed(1)}%</div>
+                </div>
+                <div style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.12)',borderRadius:'6px',padding:'0.4rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>IMPLIED VS HIST</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.65rem',color:vol>hvRes.ccVol?'#f97316':'#00ff88',marginTop:'0.1rem'}}>{vol>hvRes.ccVol?'IV > HV':'HV > IV'}</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.38rem',color:'var(--muted)'}}>{((vol-hvRes.ccVol)*100).toFixed(1)}% spread</div>
+                </div>
+              </div>
+              {/* Rolling vol mini sparkline */}
+              <div style={{fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)',marginBottom:'0.15rem'}}>20-DAY ROLLING VOL</div>
+              <div style={{display:'flex',height:'40px',alignItems:'flex-end',gap:'1px',borderRadius:'4px',background:'rgba(255,255,255,0.02)',padding:'2px'}}>
+                {hvRes.rolling.filter((_,i)=>i%4===0).map((v,i)=>{
+                  const maxV=Math.max(...hvRes.rolling);
+                  const h=Math.max(2,v/maxV*36);
+                  return <div key={i} style={{flex:1,height:h+'px',background:v>vol?'rgba(249,115,22,0.5)':'rgba(0,255,136,0.4)',borderRadius:'1px'}}/>;
+                })}
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',fontFamily:'JetBrains Mono',fontSize:'0.35rem',color:'var(--muted)',marginTop:'0.1rem'}}>
+                <span>Day 20</span>
+                <span style={{color:vol>hvRes.ccVol?'#f97316':'#00ff88'}}>— Implied Vol: {(vol*100).toFixed(0)}%</span>
+                <span>Day 252</span>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
+       BINOMIAL TREE PANEL
+    ═══════════════════════════════════════════════════ */
+    function BinomialPanel({params,currency}){
+      const{spot,strike,rate,vol,maturity}=params;
+      const cur=currency;
+      const[steps,setSteps]=useState(200);
+      const[isAm,setIsAm]=useState(false);
+      const[btRes,setBtRes]=useState(null);
+
+      const run=()=>{
+        const dt=maturity/steps;
+        const u=Math.exp(vol*Math.sqrt(dt)),d=1/u;
+        const p=(Math.exp(rate*dt)-d)/(u-d);
+        const disc=Math.exp(-rate*dt);
+
+        const priceTree=(ot,am)=>{
+          // Build terminal values
+          const V=[];
+          for(let j=0;j<=steps;j++){
+            const ST=spot*Math.pow(u,steps-2*j);
+            V.push(ot==='call'?Math.max(ST-strike,0):Math.max(strike-ST,0));
+          }
+          let earlyEx=0;
+          for(let i=steps-1;i>=0;i--){
+            for(let j=0;j<=i;j++){
+              V[j]=disc*(p*V[j]+(1-p)*V[j+1]);
+              if(am){
+                const Si=spot*Math.pow(u,i-2*j);
+                const ex=ot==='call'?Math.max(Si-strike,0):Math.max(strike-Si,0);
+                if(ex>V[j]){V[j]=ex;earlyEx++;}
+              }
+            }
+          }
+          return{price:V[0],earlyEx};
+        };
+
+        const callE=priceTree('call',false);
+        const putE=priceTree('put',false);
+        const callA=priceTree('call',isAm);
+        const putA=priceTree('put',isAm);
+        const bsC=bsPrice(spot,strike,rate,vol,maturity,'call');
+        const bsP=bsPrice(spot,strike,rate,vol,maturity,'put');
+
+        // Convergence test
+        const convSteps=[10,25,50,100,200,500];
+        const conv=convSteps.map(n=>{
+          const dt2=maturity/n,u2=Math.exp(vol*Math.sqrt(dt2)),d2=1/u2;
+          const p2=(Math.exp(rate*dt2)-d2)/(u2-d2),dc2=Math.exp(-rate*dt2);
+          const V2=[];
+          for(let j=0;j<=n;j++) V2.push(Math.max(spot*Math.pow(u2,n-2*j)-strike,0));
+          for(let i=n-1;i>=0;i--) for(let j=0;j<=i;j++) V2[j]=dc2*(p2*V2[j]+(1-p2)*V2[j+1]);
+          return{n,price:V2[0],err:Math.abs(V2[0]-bsC)};
+        });
+
+        setBtRes({callE,putE,callA,putA,bsC,bsP,u,d,p,conv});
+        gsap.fromTo('.bt-result',{y:15,opacity:0},{y:0,opacity:1,duration:0.5,ease:'back.out(1.4)'});
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1.5rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Binomial Tree (CRR)</span><div className="sdot"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--muted)',margin:'0.4rem 0 0.5rem'}}>
+            Cox-Ross-Rubinstein discrete-time model. Exact for European and American options.
+          </div>
+          <div style={{display:'flex',gap:'0.5rem',alignItems:'center',marginBottom:'0.5rem'}}>
+            <div style={{display:'flex',flexDirection:'column',gap:'0.15rem',flex:1}}>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)'}}>STEPS: {steps}</span>
+              <input type="range" min="10" max="500" step="10" value={steps} onChange={e=>setSteps(+e.target.value)} style={{accentColor:'var(--accent)'}}/>
+            </div>
+            <button className={'method-btn'+(isAm?' active':'')} style={{fontSize:'0.5rem',padding:'0.25rem 0.6rem'}} onClick={()=>setIsAm(!isAm)}>
+              {isAm?'AMERICAN':'EUROPEAN'}
+            </button>
+          </div>
+          <button className="run-btn" style={{fontSize:'0.6rem',padding:'0.5rem 1.2rem'}} onClick={run}>BUILD TREE</button>
+          {btRes&&(
+            <div className="bt-result" style={{marginTop:'0.7rem'}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.5rem',marginBottom:'0.5rem'}}>
+                <div className="opt-card">
+                  <div className="opt-type" style={{fontSize:'0.52rem'}}>BINOMIAL CALL</div>
+                  <div className="opt-price call" style={{fontSize:'1rem'}}>{cur}{(isAm?btRes.callA:btRes.callE).price.toFixed(4)}</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.45rem',color:'var(--muted)'}}>BS: {cur}{btRes.bsC.toFixed(4)} · Δ {Math.abs((isAm?btRes.callA:btRes.callE).price-btRes.bsC).toFixed(5)}</div>
+                </div>
+                <div className="opt-card">
+                  <div className="opt-type" style={{fontSize:'0.52rem'}}>BINOMIAL PUT</div>
+                  <div className="opt-price put" style={{fontSize:'1rem'}}>{cur}{(isAm?btRes.putA:btRes.putE).price.toFixed(4)}</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.45rem',color:'var(--muted)'}}>BS: {cur}{btRes.bsP.toFixed(4)} · Δ {Math.abs((isAm?btRes.putA:btRes.putE).price-btRes.bsP).toFixed(5)}</div>
+                </div>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.3rem',marginBottom:'0.5rem'}}>
+                <div style={{background:'rgba(0,255,136,0.06)',border:'1px solid rgba(0,255,136,0.12)',borderRadius:'6px',padding:'0.35rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>UP FACTOR (u)</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.65rem',color:'#00ff88',marginTop:'0.1rem'}}>{btRes.u.toFixed(5)}</div>
+                </div>
+                <div style={{background:'rgba(249,115,22,0.06)',border:'1px solid rgba(249,115,22,0.12)',borderRadius:'6px',padding:'0.35rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>DOWN FACTOR (d)</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.65rem',color:'#f97316',marginTop:'0.1rem'}}>{btRes.d.toFixed(5)}</div>
+                </div>
+                <div style={{background:'rgba(168,85,247,0.06)',border:'1px solid rgba(168,85,247,0.12)',borderRadius:'6px',padding:'0.35rem',textAlign:'center'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>RISK-NEUTRAL p</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.65rem',color:'#a855f7',marginTop:'0.1rem'}}>{btRes.p.toFixed(5)}</div>
+                </div>
+              </div>
+              {/* Convergence table */}
+              <div style={{fontFamily:'JetBrains Mono',fontSize:'0.45rem',color:'var(--accent)',letterSpacing:'0.1em',marginBottom:'0.2rem'}}>CONVERGENCE TO BLACK-SCHOLES</div>
+              <table style={{width:'100%',borderCollapse:'collapse',fontFamily:'JetBrains Mono',fontSize:'0.46rem'}}>
+                <thead>
+                  <tr style={{borderBottom:'1px solid var(--border)'}}>
+                    <th style={{padding:'0.2rem',textAlign:'left',color:'var(--muted)'}}>Steps</th>
+                    <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>Price</th>
+                    <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>|Error|</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {btRes.conv.map((r,i)=>(
+                    <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                      <td style={{padding:'0.2rem',color:'var(--text)'}}>{r.n}</td>
+                      <td style={{padding:'0.2rem',textAlign:'right',color:'#00ff88'}}>{cur}{r.price.toFixed(4)}</td>
+                      <td style={{padding:'0.2rem',textAlign:'right',color:r.err<0.01?'#00ff88':r.err<0.1?'var(--text)':'#f97316'}}>{r.err.toFixed(5)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
        REGION SELECTOR
     ═══════════════════════════════════════════════════ */
     function RegionSelector({onSelect}){
@@ -3972,6 +4194,10 @@
               <VarianceSwapPanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── GREEKS HEATMAP ──</div>
               <GreeksHeatmapPanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── HISTORICAL VOLATILITY ──</div>
+              <HistVolPanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── BINOMIAL TREE ──</div>
+              <BinomialPanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── PORTFOLIO RISK ──</div>
               <PortfolioPanel region={region} currency={cur}/>
             </>

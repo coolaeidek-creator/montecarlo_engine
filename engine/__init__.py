@@ -26,5 +26,7 @@ from .yield_curve import generate_yield_curve, price_with_term_structure
 from .sabr import sabr_implied_vol, sabr_smile, sabr_surface
 from .variance_swap import price_variance_swap
 from .greeks_surface import greeks_surface_spot_time, greeks_surface_spot_vol
+from .historical_vol import close_to_close_vol, ewma_vol
+from .binomial import price_binomial, binomial_convergence
 
-__version__ = "2.4.0"
+__version__ = "2.5.0"
