@@ -151,3 +151,119 @@ class YieldCurveRequest(BaseModel):
     rate: float = Field(0.05)
     n_points: int = Field(50, gt=5, le=200)
     max_maturity: float = Field(30.0, gt=1)
+
+
+class BinomialRequest(BaseModel):
+    """Request for binomial tree pricing."""
+    spot: float = Field(..., gt=0)
+    strike: float = Field(..., gt=0)
+    rate: float
+    volatility: float = Field(..., gt=0)
+    maturity: float = Field(..., gt=0)
+    option_type: Literal["call", "put"] = "call"
+    n_steps: int = Field(200, gt=0, le=2000)
+    american: bool = False
+
+
+class DeltaHedgeRequest(BaseModel):
+    """Request for delta hedging simulation."""
+    spot: float = Field(..., gt=0)
+    strike: float = Field(..., gt=0)
+    rate: float
+    volatility: float = Field(..., gt=0)
+    maturity: float = Field(..., gt=0)
+    option_type: Literal["call", "put"] = "call"
+    n_simulations: int = Field(1000, gt=0, le=50000)
+    rebalance_freq: int = Field(1, gt=0, le=252, description="Rebalance every N days")
+
+
+class QuantoRequest(BaseModel):
+    """Request for quanto option pricing."""
+    spot: float = Field(..., gt=0)
+    strike: float = Field(..., gt=0)
+    rate_domestic: float = Field(description="Domestic (payoff) currency rate")
+    rate_foreign: float = Field(description="Foreign (underlying) currency rate")
+    volatility: float = Field(..., gt=0)
+    fx_volatility: float = Field(..., ge=0, description="FX rate volatility")
+    correlation: float = Field(ge=-1, le=1, description="Equity-FX correlation")
+    maturity: float = Field(..., gt=0)
+    option_type: Literal["call", "put"] = "call"
+    dividend: float = Field(0.0, ge=0, description="Continuous dividend yield")
+    n_simulations: int = Field(50000, gt=0, le=500000)
+
+
+class DividendContinuousRequest(BaseModel):
+    """Request for continuous dividend BS pricing."""
+    spot: float = Field(..., gt=0)
+    strike: float = Field(..., gt=0)
+    rate: float
+    dividend_yield: float = Field(..., ge=0, description="Continuous dividend yield")
+    volatility: float = Field(..., gt=0)
+    maturity: float = Field(..., gt=0)
+    option_type: Literal["call", "put"] = "call"
+
+
+class DividendDiscreteRequest(BaseModel):
+    """Request for discrete dividend BS pricing."""
+    spot: float = Field(..., gt=0)
+    strike: float = Field(..., gt=0)
+    rate: float
+    volatility: float = Field(..., gt=0)
+    maturity: float = Field(..., gt=0)
+    option_type: Literal["call", "put"] = "call"
+    dividends: list = Field(description="List of [time, amount] pairs")
+
+
+class GreeksSurfaceRequest(BaseModel):
+    """Request for Greeks surface generation."""
+    spot: float = Field(..., gt=0)
+    strike: float = Field(..., gt=0)
+    rate: float
+    volatility: float = Field(..., gt=0)
+    maturity: float = Field(1.0, gt=0)
+    option_type: Literal["call", "put"] = "call"
+    surface_type: Literal["spot-time", "spot-vol"] = "spot-time"
+    n_spot: int = Field(15, gt=3, le=50)
+    n_secondary: int = Field(12, gt=3, le=50)
+
+
+class HistoricalVolRequest(BaseModel):
+    """Request for historical volatility estimation."""
+    prices: list = Field(description="List of close prices")
+    window: int = Field(20, gt=1, le=252)
+    method: Literal["close-to-close", "ewma"] = "close-to-close"
+    decay: float = Field(0.94, gt=0, lt=1, description="EWMA decay factor")
+
+
+class SABRRequest(BaseModel):
+    """Request for SABR model."""
+    spot: float = Field(..., gt=0)
+    rate: float
+    maturity: float = Field(..., gt=0)
+    alpha: float = Field(0.3, gt=0, description="Vol of vol")
+    beta: float = Field(0.7, ge=0, le=1, description="CEV exponent")
+    rho: float = Field(-0.25, ge=-1, le=1, description="Forward-vol correlation")
+    sigma0: float = Field(0.25, gt=0, description="Initial vol")
+    n_strikes: int = Field(15, gt=3, le=50)
+
+
+class VarianceSwapRequest(BaseModel):
+    """Request for variance swap pricing."""
+    spot: float = Field(..., gt=0)
+    rate: float
+    volatility: float = Field(..., gt=0)
+    maturity: float = Field(1.0, gt=0)
+    n_simulations: int = Field(50000, gt=0, le=500000)
+    n_steps: int = Field(252, gt=0, le=1000)
+    notional: float = Field(1e6, gt=0)
+
+
+class PathsRequest(BaseModel):
+    """Request for GBM path simulation."""
+    spot: float = Field(..., gt=0)
+    rate: float
+    volatility: float = Field(..., gt=0)
+    maturity: float = Field(1.0, gt=0)
+    n_simulations: int = Field(20, gt=0, le=200, description="Number of paths to return")
+    n_steps: int = Field(252, gt=0, le=1000)
+    antithetic: bool = False

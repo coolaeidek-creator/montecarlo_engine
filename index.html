@@ -4027,19 +4027,206 @@
     }
 
     /* ═══════════════════════════════════════════════════
+       QUANTO OPTION PANEL
+    ═══════════════════════════════════════════════════ */
+    function QuantoPanel({params,currency}){
+      const{spot,strike,vol,maturity}=params;
+      const cur=currency;
+      const[rd,setRd]=useState(0.05);
+      const[rf,setRf]=useState(0.03);
+      const[fxVol,setFxVol]=useState(0.10);
+      const[corr,setCorr]=useState(0.30);
+      const[res,setRes]=useState(null);
+
+      const run=()=>{
+        // Quanto-adjusted BS
+        const qAdj=rf-rd+corr*vol*fxVol;
+        const muQ=rd-qAdj;
+        const sq=Math.sqrt(maturity);
+        const d1=(Math.log(spot/strike)+(muQ+0.5*vol*vol)*maturity)/(vol*sq);
+        const d2=d1-vol*sq;
+        const dfQ=Math.exp(-qAdj*maturity),dfD=Math.exp(-rd*maturity);
+        const callQ=spot*dfQ*normalCDF(d1)-strike*dfD*normalCDF(d2);
+        const putQ=strike*dfD*normalCDF(-d2)-spot*dfQ*normalCDF(-d1);
+        // Vanilla for comparison (no quanto adjustment, rate = foreign)
+        const d1v=(Math.log(spot/strike)+(rf+0.5*vol*vol)*maturity)/(vol*sq);
+        const d2v=d1v-vol*sq;
+        const dfRf=Math.exp(-rf*maturity);
+        const callV=spot*normalCDF(d1v)-strike*dfRf*normalCDF(d2v);
+        const putV=strike*dfRf*normalCDF(-d2v)-spot*normalCDF(-d1v);
+        setRes({callQ,putQ,callV,putV,muQ,qAdj});
+        setTimeout(()=>gsap.fromTo('.quanto-result',{y:15,opacity:0},{y:0,opacity:1,duration:0.5,ease:'back.out(1.4)'}),10);
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1.5rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Quanto Option Pricing</span><div className="sdot"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--muted)',margin:'0.4rem 0 0.6rem',lineHeight:'1.5'}}>
+            Quanto (quantity-adjusted) option pays in a different currency at a fixed FX rate. Drift is reduced by ρ·σ_S·σ_FX.
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'0.5rem',marginBottom:'0.6rem'}}>
+            <div>
+              <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)',marginBottom:'0.2rem'}}>DOMESTIC RATE</div>
+              <input type="number" step="0.005" value={rd} onChange={e=>setRd(parseFloat(e.target.value)||0)} style={{width:'100%',background:'rgba(255,255,255,0.03)',border:'1px solid var(--border)',color:'var(--text)',padding:'0.35rem',fontFamily:'JetBrains Mono',fontSize:'0.5rem',borderRadius:'4px'}}/>
+            </div>
+            <div>
+              <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)',marginBottom:'0.2rem'}}>FOREIGN RATE</div>
+              <input type="number" step="0.005" value={rf} onChange={e=>setRf(parseFloat(e.target.value)||0)} style={{width:'100%',background:'rgba(255,255,255,0.03)',border:'1px solid var(--border)',color:'var(--text)',padding:'0.35rem',fontFamily:'JetBrains Mono',fontSize:'0.5rem',borderRadius:'4px'}}/>
+            </div>
+            <div>
+              <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)',marginBottom:'0.2rem'}}>FX VOL</div>
+              <input type="number" step="0.01" value={fxVol} onChange={e=>setFxVol(parseFloat(e.target.value)||0)} style={{width:'100%',background:'rgba(255,255,255,0.03)',border:'1px solid var(--border)',color:'var(--text)',padding:'0.35rem',fontFamily:'JetBrains Mono',fontSize:'0.5rem',borderRadius:'4px'}}/>
+            </div>
+            <div>
+              <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)',marginBottom:'0.2rem'}}>CORRELATION</div>
+              <input type="number" step="0.1" min="-1" max="1" value={corr} onChange={e=>setCorr(parseFloat(e.target.value)||0)} style={{width:'100%',background:'rgba(255,255,255,0.03)',border:'1px solid var(--border)',color:'var(--text)',padding:'0.35rem',fontFamily:'JetBrains Mono',fontSize:'0.5rem',borderRadius:'4px'}}/>
+            </div>
+          </div>
+          <button className="run-btn" style={{fontSize:'0.6rem',padding:'0.5rem 1.2rem'}} onClick={run}>PRICE QUANTO</button>
+          {res&&(
+            <div className="quanto-result" style={{marginTop:'0.7rem'}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'0.6rem'}}>
+                <div style={{padding:'0.6rem',background:'rgba(0,255,136,0.04)',borderLeft:'2px solid #00ff88',borderRadius:'4px'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>QUANTO CALL</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.8rem',color:'#00ff88'}}>{cur}{res.callQ.toFixed(3)}</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.38rem',color:'var(--muted)'}}>vanilla: {cur}{res.callV.toFixed(3)} · Δ: {(res.callQ-res.callV>0?'+':'')}{(res.callQ-res.callV).toFixed(3)}</div>
+                </div>
+                <div style={{padding:'0.6rem',background:'rgba(249,115,22,0.04)',borderLeft:'2px solid #f97316',borderRadius:'4px'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>QUANTO PUT</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.8rem',color:'#f97316'}}>{cur}{res.putQ.toFixed(3)}</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.38rem',color:'var(--muted)'}}>vanilla: {cur}{res.putV.toFixed(3)} · Δ: {(res.putQ-res.putV>0?'+':'')}{(res.putQ-res.putV).toFixed(3)}</div>
+                </div>
+              </div>
+              <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)',marginTop:'0.5rem',padding:'0.4rem',background:'rgba(255,255,255,0.02)',borderRadius:'4px'}}>
+                Adjusted drift μ' = {res.muQ.toFixed(4)} · Quanto yield q' = {res.qAdj.toFixed(4)} · Quanto drag = ρ·σ_S·σ_FX = {(corr*vol*fxVol).toFixed(4)}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
+       DIVIDEND ADJUSTMENT PANEL
+    ═══════════════════════════════════════════════════ */
+    function DividendPanel({params,currency}){
+      const{spot,strike,rate,vol,maturity}=params;
+      const cur=currency;
+      const[mode,setMode]=useState('continuous');
+      const[divYield,setDivYield]=useState(0.03);
+      const[freq,setFreq]=useState('quarterly');
+      const[res,setRes]=useState(null);
+
+      const run=()=>{
+        const sq=Math.sqrt(maturity);
+        if(mode==='continuous'){
+          const d1=(Math.log(spot/strike)+(rate-divYield+0.5*vol*vol)*maturity)/(vol*sq);
+          const d2=d1-vol*sq;
+          const dfQ=Math.exp(-divYield*maturity),dfR=Math.exp(-rate*maturity);
+          const call=spot*dfQ*normalCDF(d1)-strike*dfR*normalCDF(d2);
+          const put=strike*dfR*normalCDF(-d2)-spot*dfQ*normalCDF(-d1);
+          // No-div vanilla
+          const d1v=(Math.log(spot/strike)+(rate+0.5*vol*vol)*maturity)/(vol*sq);
+          const d2v=d1v-vol*sq;
+          const callV=spot*normalCDF(d1v)-strike*dfR*normalCDF(d2v);
+          const putV=strike*dfR*normalCDF(-d2v)-spot*normalCDF(-d1v);
+          setRes({mode:'continuous',call,put,callV,putV,deltaC:call-callV,deltaP:put-putV});
+        }else{
+          // Discrete: build schedule, subtract PV from spot, price vanilla
+          const freqMap={monthly:12,quarterly:4,semiannual:2,annual:1};
+          const nPerYear=freqMap[freq]||4;
+          const nTotal=Math.floor(maturity*nPerYear);
+          const perDiv=spot*divYield/nPerYear;
+          let pvDivs=0;
+          const divs=[];
+          for(let i=1;i<=nTotal;i++){
+            const t=i/nPerYear;
+            if(t<=maturity){divs.push({t,d:perDiv});pvDivs+=perDiv*Math.exp(-rate*t);}
+          }
+          const spotAdj=spot-pvDivs;
+          const d1=(Math.log(spotAdj/strike)+(rate+0.5*vol*vol)*maturity)/(vol*sq);
+          const d2=d1-vol*sq;
+          const dfR=Math.exp(-rate*maturity);
+          const call=spotAdj*normalCDF(d1)-strike*dfR*normalCDF(d2);
+          const put=strike*dfR*normalCDF(-d2)-spotAdj*normalCDF(-d1);
+          // Vanilla (no div)
+          const d1v=(Math.log(spot/strike)+(rate+0.5*vol*vol)*maturity)/(vol*sq);
+          const d2v=d1v-vol*sq;
+          const callV=spot*normalCDF(d1v)-strike*dfR*normalCDF(d2v);
+          const putV=strike*dfR*normalCDF(-d2v)-spot*normalCDF(-d1v);
+          setRes({mode:'discrete',call,put,callV,putV,deltaC:call-callV,deltaP:put-putV,spotAdj,pvDivs,nDivs:divs.length});
+        }
+        setTimeout(()=>gsap.fromTo('.div-result',{y:15,opacity:0},{y:0,opacity:1,duration:0.5,ease:'back.out(1.4)'}),10);
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1.5rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Dividend Adjustment</span><div className="sdot"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--muted)',margin:'0.4rem 0 0.6rem',lineHeight:'1.5'}}>
+            Adjusts for dividends using continuous yield q (BSM) or discrete cash divs (escrowed model: subtract PV from spot).
+          </div>
+          <div style={{display:'flex',gap:'0.5rem',marginBottom:'0.6rem'}}>
+            {[['continuous','Continuous q'],['discrete','Discrete Cash']].map(([k,l])=>(
+              <button key={k} onClick={()=>setMode(k)} style={{flex:1,padding:'0.4rem',fontFamily:'JetBrains Mono',fontSize:'0.45rem',background:mode===k?'rgba(0,255,136,0.1)':'rgba(255,255,255,0.02)',border:'1px solid '+(mode===k?'#00ff88':'var(--border)'),color:mode===k?'#00ff88':'var(--muted)',cursor:'pointer',borderRadius:'4px'}}>{l}</button>
+            ))}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:mode==='discrete'?'1fr 1fr':'1fr',gap:'0.5rem',marginBottom:'0.6rem'}}>
+            <div>
+              <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)',marginBottom:'0.2rem'}}>DIVIDEND YIELD</div>
+              <input type="number" step="0.005" value={divYield} onChange={e=>setDivYield(parseFloat(e.target.value)||0)} style={{width:'100%',background:'rgba(255,255,255,0.03)',border:'1px solid var(--border)',color:'var(--text)',padding:'0.35rem',fontFamily:'JetBrains Mono',fontSize:'0.5rem',borderRadius:'4px'}}/>
+            </div>
+            {mode==='discrete'&&(
+              <div>
+                <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)',marginBottom:'0.2rem'}}>FREQUENCY</div>
+                <select value={freq} onChange={e=>setFreq(e.target.value)} style={{width:'100%',background:'rgba(255,255,255,0.03)',border:'1px solid var(--border)',color:'var(--text)',padding:'0.35rem',fontFamily:'JetBrains Mono',fontSize:'0.5rem',borderRadius:'4px'}}>
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="semiannual">Semi-Annual</option>
+                  <option value="annual">Annual</option>
+                </select>
+              </div>
+            )}
+          </div>
+          <button className="run-btn" style={{fontSize:'0.6rem',padding:'0.5rem 1.2rem'}} onClick={run}>APPLY DIVIDEND ADJUSTMENT</button>
+          {res&&(
+            <div className="div-result" style={{marginTop:'0.7rem'}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'0.6rem'}}>
+                <div style={{padding:'0.6rem',background:'rgba(0,255,136,0.04)',borderLeft:'2px solid #00ff88',borderRadius:'4px'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>CALL (DIV-ADJ)</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.8rem',color:'#00ff88'}}>{cur}{res.call.toFixed(3)}</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.38rem',color:'var(--muted)'}}>vanilla: {cur}{res.callV.toFixed(3)} · Δ: {res.deltaC>0?'+':''}{res.deltaC.toFixed(3)}</div>
+                </div>
+                <div style={{padding:'0.6rem',background:'rgba(249,115,22,0.04)',borderLeft:'2px solid #f97316',borderRadius:'4px'}}>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>PUT (DIV-ADJ)</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.8rem',color:'#f97316'}}>{cur}{res.put.toFixed(3)}</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:'0.38rem',color:'var(--muted)'}}>vanilla: {cur}{res.putV.toFixed(3)} · Δ: {res.deltaP>0?'+':''}{res.deltaP.toFixed(3)}</div>
+                </div>
+              </div>
+              {res.mode==='discrete'&&(
+                <div style={{fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)',marginTop:'0.5rem',padding:'0.4rem',background:'rgba(255,255,255,0.02)',borderRadius:'4px'}}>
+                  {res.nDivs} discrete divs · PV = {cur}{res.pvDivs.toFixed(3)} · S_adj = {cur}{res.spotAdj.toFixed(3)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
        ENGINE FOOTER
     ═══════════════════════════════════════════════════ */
     function EngineFooter(){
       return(
         <div style={{marginTop:'3rem',paddingTop:'1.5rem',borderTop:'1px solid rgba(255,255,255,0.06)',textAlign:'center'}}>
           <div style={{fontFamily:'JetBrains Mono',fontSize:'0.6rem',color:'var(--accent)',letterSpacing:'0.2em',marginBottom:'0.4rem'}}>
-            MONTE CARLO ENGINE v3.0
+            MONTE CARLO ENGINE v3.1
           </div>
           <div style={{display:'flex',justifyContent:'center',gap:'1.5rem',flexWrap:'wrap',marginBottom:'0.5rem'}}>
             {[
-              ['20','Engine Modules'],['34','Interactive Panels'],['184+','Unit Tests'],
-              ['8','Pricing Models'],['5','MC Methods'],['40','Global Stocks'],
-              ['4','Regions'],['20','API Endpoints'],
+              ['22','Engine Modules'],['36','Interactive Panels'],['210+','Unit Tests'],
+              ['9','Pricing Models'],['5','MC Methods'],['40','Global Stocks'],
+              ['4','Regions'],['34','API Endpoints'],
             ].map(([n,l])=>(
               <div key={l} style={{textAlign:'center'}}>
                 <div style={{fontFamily:'JetBrains Mono',fontSize:'0.7rem',color:'var(--accent)'}}>{n}</div>
@@ -4048,8 +4235,8 @@
             ))}
           </div>
           <div style={{fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)',lineHeight:'1.6'}}>
-            Models: Black-Scholes · Monte Carlo (5 methods) · Binomial Tree · Heston SV · SABR · Merton Jump-Diffusion · Longstaff-Schwartz LSM
-            <br/>Features: Greeks · Exotic Options · Risk Metrics · Implied Vol · Vol Surface · Yield Curve · Delta Hedging · Variance Swaps
+            Models: Black-Scholes · Monte Carlo (5 methods) · Binomial Tree · Heston SV · SABR · Merton Jump-Diffusion · Longstaff-Schwartz LSM · Quanto
+            <br/>Features: Greeks · Exotic Options · Risk Metrics · Implied Vol · Vol Surface · Yield Curve · Delta Hedging · Variance Swaps · Dividends
             <br/>Built with React 18 · Three.js · Chart.js · GSAP · Python FastAPI
           </div>
           <div style={{fontFamily:'JetBrains Mono',fontSize:'0.35rem',color:'rgba(255,255,255,0.15)',marginTop:'0.6rem',letterSpacing:'0.15em'}}>
@@ -4335,6 +4522,10 @@
               <BinomialPanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── DELTA HEDGING ──</div>
               <DeltaHedgePanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── QUANTO OPTIONS ──</div>
+              <QuantoPanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── DIVIDEND ADJUSTMENT ──</div>
+              <DividendPanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── PORTFOLIO RISK ──</div>
               <PortfolioPanel region={region} currency={cur}/>
               <EngineFooter/>

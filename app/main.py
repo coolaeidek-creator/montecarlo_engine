@@ -188,9 +188,9 @@ def demo_vol_surface(market, cur):
 
 def main():
     divider()
-    print("  MONTE CARLO OPTIONS PRICING ENGINE v2.0")
+    print("  MONTE CARLO OPTIONS PRICING ENGINE v3.1")
     print("  Full Demo — Vanilla · Exotic · Risk · IV · Vol Surface")
-    print("  4 Regions · 40 Stocks · 58 Test Cases")
+    print("  4 Regions · 40 Stocks · 22 Engine Modules")
     divider()
 
     # ── 1) VANILLA PRICING ───────────────────────────────
@@ -237,14 +237,17 @@ def main():
 
     # ── FOOTER ────────────────────────────────────────────
     divider()
-    print("  Engine v2.0 Capabilities:")
+    print("  Engine v3.1 Capabilities:")
     print("    · Standard MC · Antithetic Variates · Black-Scholes Validation")
     print("    · Exotic: Asian · Barrier · Lookback · Digital")
     print("    · Risk: VaR · CVaR (Parametric + MC) · Max Drawdown")
     print("    · IV Solver: Newton-Raphson + Bisection · Vol Surface (SVI)")
-    print("    · Greeks: Delta · Gamma · Theta · Vega · Rho")
-    print("    · API: FastAPI REST endpoints · 40 stocks · 4 regions")
-    print("    · Tests: 58 test cases — all passing")
+    print("    · Greeks: Delta · Gamma · Theta · Vega · Rho · Greeks Surface")
+    print("    · Models: Heston SV · SABR · Merton Jump-Diffusion · Binomial CRR")
+    print("    · American: Longstaff-Schwartz LSM · Binomial Tree")
+    print("    · Quanto Options · Dividend Adjustments · Variance Swaps")
+    print("    · Delta Hedging · Historical Vol · Yield Curve")
+    print("    · API: 30+ FastAPI REST endpoints · 40 stocks · 4 regions")
     print("  Live:   montecarloengine.vercel.app")
     divider()
 

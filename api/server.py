@@ -1,17 +1,31 @@
 """
-FastAPI REST API for the Monte Carlo Options Pricing Engine.
+FastAPI REST API for the Monte Carlo Options Pricing Engine v3.1
 
 Endpoints:
-  POST /api/price          — Price vanilla European option (MC + BS)
-  POST /api/exotic         — Price exotic options (Asian, Barrier, Lookback, Digital)
-  POST /api/greeks         — Compute BS Greeks
-  POST /api/risk           — Compute VaR, CVaR risk metrics
-  POST /api/iv             — Solve for implied volatility
-  POST /api/vol-surface    — Generate volatility surface
-  POST /api/stock-price    — Price using predefined stock data
-  GET  /api/stocks         — List all available stocks by region
-  GET  /api/regions        — List available regions
-  GET  /api/health         — Health check
+  POST /api/price              — Price vanilla European option (MC + BS)
+  POST /api/exotic             — Price exotic options (Asian, Barrier, Lookback, Digital)
+  POST /api/greeks             — Compute BS Greeks
+  POST /api/greeks-surface     — Generate Greeks surface (spot×time or spot×vol)
+  POST /api/risk               — Compute VaR, CVaR risk metrics
+  POST /api/iv                 — Solve for implied volatility
+  POST /api/vol-surface        — Generate volatility surface
+  POST /api/stock-price        — Price using predefined stock data
+  POST /api/binomial           — Binomial tree pricing (CRR)
+  POST /api/binomial/converge  — Binomial convergence analysis
+  POST /api/delta-hedge        — Delta hedging simulation
+  POST /api/delta-hedge/compare — Compare hedge frequencies
+  POST /api/quanto             — Quanto option pricing (BS)
+  POST /api/quanto/mc          — Quanto option pricing (MC)
+  POST /api/dividend/continuous — BS with continuous dividend yield
+  POST /api/dividend/discrete  — BS with discrete cash dividends
+  POST /api/sabr/smile         — SABR volatility smile
+  POST /api/sabr/surface       — SABR volatility surface
+  POST /api/variance-swap      — Variance swap pricing
+  POST /api/historical-vol     — Historical volatility estimation
+  POST /api/paths              — GBM path simulation
+  GET  /api/stocks             — List all available stocks by region
+  GET  /api/regions            — List available regions
+  GET  /api/health             — Health check
 """
 
 from fastapi import FastAPI, HTTPException
@@ -22,6 +36,10 @@ from .schemas import (
     IVRequest, GreeksRequest, VolSurfaceRequest, StockPriceRequest,
     JumpDiffusionRequest, MCGreeksRequest, AmericanRequest,
     HestonRequest, YieldCurveRequest,
+    BinomialRequest, DeltaHedgeRequest, QuantoRequest,
+    DividendContinuousRequest, DividendDiscreteRequest,
+    GreeksSurfaceRequest, HistoricalVolRequest, SABRRequest,
+    VarianceSwapRequest, PathsRequest,
 )
 
 import sys
@@ -43,13 +61,22 @@ from engine.american import price_american
 from engine.heston import price_heston, heston_smile
 from engine.yield_curve import generate_yield_curve
 from engine.stocks import REGIONS, get_stock, get_region
+from engine.binomial import price_binomial, binomial_convergence
+from engine.delta_hedge import simulate_delta_hedge, compare_hedge_frequencies
+from engine.quanto import quanto_bs_price, quanto_mc
+from engine.dividend import bs_with_continuous_dividend, bs_with_discrete_dividends
+from engine.greeks_surface import greeks_surface_spot_time, greeks_surface_spot_vol
+from engine.historical_vol import close_to_close_vol, ewma_vol
+from engine.sabr import sabr_smile, sabr_surface
+from engine.variance_swap import price_variance_swap
+from engine.paths import simulate_paths
 
 
 app = FastAPI(
     title="Monte Carlo Options Pricing Engine",
     description="Industry-grade options pricing with MC simulation, BS validation, "
                 "exotic options, risk metrics, and implied volatility.",
-    version="2.0.0",
+    version="3.1.0",
 )
 
 app.add_middleware(
@@ -64,11 +91,15 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "engine": "monte-carlo-v2.1", "features": [
+    return {"status": "ok", "engine": "monte-carlo-v3.1", "features": [
         "vanilla_mc", "antithetic_variates", "black_scholes",
-        "greeks", "mc_greeks", "exotic_options", "american_lsm",
-        "jump_diffusion", "risk_metrics",
-        "implied_volatility", "vol_surface", "40_stocks_4_regions",
+        "greeks", "mc_greeks", "greeks_surface", "exotic_options",
+        "american_lsm", "binomial_tree", "jump_diffusion",
+        "heston_sv", "sabr", "risk_metrics",
+        "implied_volatility", "vol_surface", "yield_curve",
+        "delta_hedging", "variance_swaps", "quanto_options",
+        "dividend_adjustments", "historical_vol", "path_simulation",
+        "40_stocks_4_regions",
     ]}
 
 
@@ -391,3 +422,195 @@ def get_yield_curve(req: YieldCurveRequest):
         model=req.model, rate=req.rate,
         n_points=req.n_points, max_maturity=req.max_maturity,
     )
+
+
+# ─── Binomial Tree ─────────────────────────────────────────────────────────
+
+@app.post("/api/binomial")
+def binomial_price(req: BinomialRequest):
+    """Price option using CRR binomial tree."""
+    market = MarketEnvironment(
+        spot=req.spot, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+    )
+    contract = OptionContract(strike=req.strike, option_type=req.option_type)
+    return price_binomial(market, contract, req.n_steps, req.american)
+
+
+@app.post("/api/binomial/converge")
+def binomial_converge(req: BinomialRequest):
+    """Show binomial price convergence across step counts."""
+    market = MarketEnvironment(
+        spot=req.spot, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+    )
+    contract = OptionContract(strike=req.strike, option_type=req.option_type)
+    return binomial_convergence(market, contract, american=req.american)
+
+
+# ─── Delta Hedging ─────────────────────────────────────────────────────────
+
+@app.post("/api/delta-hedge")
+def delta_hedge(req: DeltaHedgeRequest):
+    """Simulate delta hedging of a short option position."""
+    market = MarketEnvironment(
+        spot=req.spot, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+    )
+    contract = OptionContract(strike=req.strike, option_type=req.option_type)
+    result = simulate_delta_hedge(
+        market, contract, req.n_simulations, req.rebalance_freq,
+    )
+    result["pnl_95_ci"] = list(result["pnl_95_ci"])
+    return result
+
+
+@app.post("/api/delta-hedge/compare")
+def delta_hedge_compare(req: DeltaHedgeRequest):
+    """Compare hedge P&L across rebalancing frequencies."""
+    market = MarketEnvironment(
+        spot=req.spot, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+    )
+    contract = OptionContract(strike=req.strike, option_type=req.option_type)
+    return compare_hedge_frequencies(market, contract, req.n_simulations)
+
+
+# ─── Quanto Options ────────────────────────────────────────────────────────
+
+@app.post("/api/quanto")
+def quanto_price(req: QuantoRequest):
+    """Price quanto option using modified Black-Scholes."""
+    return quanto_bs_price(
+        spot=req.spot, strike=req.strike,
+        rate_domestic=req.rate_domestic, rate_foreign=req.rate_foreign,
+        volatility=req.volatility, fx_volatility=req.fx_volatility,
+        correlation=req.correlation, maturity=req.maturity,
+        option_type=req.option_type, dividend=req.dividend,
+    )
+
+
+@app.post("/api/quanto/mc")
+def quanto_monte_carlo(req: QuantoRequest):
+    """Price quanto option via Monte Carlo."""
+    result = quanto_mc(
+        spot=req.spot, strike=req.strike,
+        rate_domestic=req.rate_domestic, rate_foreign=req.rate_foreign,
+        volatility=req.volatility, fx_volatility=req.fx_volatility,
+        correlation=req.correlation, maturity=req.maturity,
+        option_type=req.option_type, n_simulations=req.n_simulations,
+    )
+    result["confidence_interval"] = list(result["confidence_interval"])
+    return result
+
+
+# ─── Dividend Adjustments ──────────────────────────────────────────────────
+
+@app.post("/api/dividend/continuous")
+def dividend_continuous(req: DividendContinuousRequest):
+    """Price option with continuous dividend yield."""
+    return bs_with_continuous_dividend(
+        spot=req.spot, strike=req.strike, rate=req.rate,
+        dividend_yield=req.dividend_yield, volatility=req.volatility,
+        maturity=req.maturity, option_type=req.option_type,
+    )
+
+
+@app.post("/api/dividend/discrete")
+def dividend_discrete(req: DividendDiscreteRequest):
+    """Price option with discrete cash dividends."""
+    divs = [(d[0], d[1]) for d in req.dividends]
+    return bs_with_discrete_dividends(
+        spot=req.spot, strike=req.strike, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+        dividends=divs, option_type=req.option_type,
+    )
+
+
+# ─── Greeks Surface ────────────────────────────────────────────────────────
+
+@app.post("/api/greeks-surface")
+def get_greeks_surface(req: GreeksSurfaceRequest):
+    """Generate 2D Greeks surface for visualization."""
+    if req.surface_type == "spot-time":
+        return greeks_surface_spot_time(
+            spot=req.spot, strike=req.strike, rate=req.rate,
+            volatility=req.volatility, option_type=req.option_type,
+            n_spot=req.n_spot, n_time=req.n_secondary,
+        )
+    else:
+        return greeks_surface_spot_vol(
+            spot=req.spot, strike=req.strike, rate=req.rate,
+            maturity=req.maturity, option_type=req.option_type,
+            n_spot=req.n_spot, n_vol=req.n_secondary,
+        )
+
+
+# ─── Historical Volatility ─────────────────────────────────────────────────
+
+@app.post("/api/historical-vol")
+def get_historical_vol(req: HistoricalVolRequest):
+    """Estimate historical volatility from price data."""
+    if req.method == "ewma":
+        result = ewma_vol(req.prices, req.decay)
+    else:
+        result = close_to_close_vol(req.prices, req.window)
+    return result
+
+
+# ─── SABR Model ────────────────────────────────────────────────────────────
+
+@app.post("/api/sabr/smile")
+def get_sabr_smile(req: SABRRequest):
+    """Generate SABR volatility smile."""
+    return sabr_smile(
+        spot=req.spot, rate=req.rate, maturity=req.maturity,
+        alpha=req.alpha, beta=req.beta, rho=req.rho,
+        sigma0=req.sigma0, n_strikes=req.n_strikes,
+    )
+
+
+@app.post("/api/sabr/surface")
+def get_sabr_surface(req: SABRRequest):
+    """Generate full SABR volatility surface."""
+    return sabr_surface(
+        spot=req.spot, rate=req.rate,
+        alpha=req.alpha, beta=req.beta, rho=req.rho,
+        sigma0=req.sigma0, n_strikes=req.n_strikes,
+    )
+
+
+# ─── Variance Swap ─────────────────────────────────────────────────────────
+
+@app.post("/api/variance-swap")
+def variance_swap(req: VarianceSwapRequest):
+    """Price variance swap via Monte Carlo."""
+    market = MarketEnvironment(
+        spot=req.spot, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+    )
+    return price_variance_swap(
+        market, req.n_simulations, req.n_steps, req.notional,
+    )
+
+
+# ─── Path Simulation ──────────────────────────────────────────────────────
+
+@app.post("/api/paths")
+def get_paths(req: PathsRequest):
+    """Simulate GBM price paths."""
+    market = MarketEnvironment(
+        spot=req.spot, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+    )
+    paths = simulate_paths(
+        market, req.n_simulations, req.n_steps, req.antithetic,
+    )
+    time_grid = [i * req.maturity / req.n_steps for i in range(req.n_steps + 1)]
+    return {
+        "paths": paths.tolist(),
+        "time_grid": time_grid,
+        "n_simulations": req.n_simulations,
+        "n_steps": req.n_steps,
+        "spot": req.spot,
+    }

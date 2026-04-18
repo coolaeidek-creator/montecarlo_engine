@@ -29,5 +29,11 @@ from .greeks_surface import greeks_surface_spot_time, greeks_surface_spot_vol
 from .historical_vol import close_to_close_vol, ewma_vol
 from .binomial import price_binomial, binomial_convergence
 from .delta_hedge import simulate_delta_hedge, compare_hedge_frequencies
+from .quanto import quanto_bs_price, quanto_mc
+from .dividend import (
+    bs_with_continuous_dividend,
+    bs_with_discrete_dividends,
+    dividend_schedule,
+)
 
-__version__ = "3.0.0"
+__version__ = "3.1.0"
