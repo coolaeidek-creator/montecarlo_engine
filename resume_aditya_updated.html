@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Aditya Kumar - Resume</title>
+<style>
+  @page { margin: 0.5in 0.6in; size: A4; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+    font-size: 10.5pt;
+    color: #222;
+    line-height: 1.45;
+    max-width: 8.27in;
+    margin: 0 auto;
+    padding: 0.5in 0.6in;
+  }
+  h1 {
+    text-align: center;
+    font-size: 22pt;
+    color: #1a1a1a;
+    margin-bottom: 2px;
+    font-weight: 700;
+  }
+  .subtitle {
+    text-align: center;
+    font-size: 11pt;
+    color: #2a6496;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  .contact {
+    text-align: center;
+    font-size: 9.5pt;
+    color: #444;
+    margin-bottom: 2px;
+  }
+  .section-title {
+    font-size: 11.5pt;
+    font-weight: 700;
+    color: #2a6496;
+    margin-top: 14px;
+    margin-bottom: 4px;
+    padding-bottom: 3px;
+    border-bottom: 2.5px solid #2a6496;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .skills-row {
+    margin-bottom: 2px;
+  }
+  .skills-row strong {
+    color: #222;
+  }
+  .project-title {
+    font-weight: 700;
+    font-size: 10.5pt;
+    color: #1a1a1a;
+    margin-top: 10px;
+    margin-bottom: 1px;
+  }
+  .project-tech {
+    font-style: italic;
+    font-size: 9.5pt;
+    color: #555;
+    margin-bottom: 3px;
+  }
+  ul {
+    margin-left: 18px;
+    margin-bottom: 4px;
+  }
+  li {
+    margin-bottom: 3px;
+    text-align: justify;
+  }
+  .edu-school {
+    font-weight: 700;
+    font-size: 10.5pt;
+  }
+  .edu-detail {
+    font-size: 10pt;
+    color: #444;
+  }
+  .cert-list {
+    margin-left: 18px;
+  }
+  .cert-list li {
+    margin-bottom: 2px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Aditya Kumar</h1>
+<div class="subtitle">Aspiring AI / ML Software Engineer</div>
+<div class="contact">Chennai, India | +91 86033 72698 | adityakr0405@gmail.com</div>
+<div class="contact">B.Tech Artificial Intelligence | SRM University KTR | 2023 - 2027</div>
+
+<div class="section-title">Summary</div>
+<p>3rd-year B.Tech Artificial Intelligence student with proven experience engineering real-time intelligent systems across audio signal processing, computer vision, and NLP. Skilled in Python, end-to-end ML pipelines, DSP workflows, and deep learning model development. Driven to build scalable, research-backed AI solutions that deliver measurable real-world impact.</p>
+
+<div class="section-title">Technical Skills</div>
+<div class="skills-row"><strong>Languages:</strong> Python, C++, JavaScript</div>
+<div class="skills-row"><strong>AI and ML:</strong> Machine Learning, Deep Learning, CNN, SVM, Random Forest, NLP, Computer Vision</div>
+<div class="skills-row"><strong>Audio and DSP:</strong> Librosa, MFCC, Mel Spectrogram, FFT, Hamming Window, Data Augmentation, Zero-Crossing Rate</div>
+<div class="skills-row"><strong>Frameworks:</strong> TensorFlow, Keras, Scikit-learn, OpenCV, NumPy, SciPy, Matplotlib, Seaborn</div>
+<div class="skills-row"><strong>Web and Backend:</strong> React, FastAPI, HTML, CSS, REST APIs, SQL, DBMS</div>
+<div class="skills-row"><strong>Tools:</strong> Git, GitHub, Linux, VS Code, Virtual Environments, Vercel</div>
+<div class="skills-row"><strong>CS Concepts:</strong> OOP, Data Structures and Algorithms, Feature Engineering, Imbalanced Learning, Model Evaluation</div>
+
+<div class="section-title">Projects</div>
+
+<div class="project-title">Newborn Baby Cry Detection and Real-Time Behaviour Analysis</div>
+<div class="project-tech">Python, Librosa, Scikit-learn, TensorFlow, Keras, NumPy, Matplotlib, Seaborn</div>
+<ul>
+  <li>Engineered a real-time audio ML pipeline using a full DSP workflow including Hamming windowing, FFT, and Mel scale mapping to extract 39-dimensional MFCC feature vectors (base + delta + delta-delta) for representing distinct infant cry patterns</li>
+  <li>Applied data augmentation techniques including pitch shifting, time stretching, and Gaussian noise addition to resolve severe class imbalance (85% Hunger, 3.6% Pain); trained and benchmarked SVM, Random Forest, and CNN models on MFCC and Mel Spectrogram inputs</li>
+  <li>Classified cry types including hunger, pain, discomfort, and tiredness in real time and evaluated model performance using medical-grade metrics including Sensitivity, Specificity, F1-Score, and AUC-ROC with emphasis on minority-class recall for healthcare reliability</li>
+</ul>
+
+<div class="project-title">AI-Refined Sign Language Translator</div>
+<div class="project-tech">Python, OpenCV, TensorFlow, NLP</div>
+<ul>
+  <li>Built a real-time hand gesture recognition system using a CNN trained on webcam frames preprocessed with OpenCV for robust hand detection across varied lighting and background conditions</li>
+  <li>Achieved high multi-class sign classification accuracy through convolutional feature extraction, systematic hyperparameter tuning, and training on a structured labelled gesture dataset</li>
+  <li>Converted recognised gestures to natural language text and synthesised speech output, delivering an end-to-end accessibility tool for hearing-impaired users</li>
+</ul>
+
+<div class="project-title">Monte Carlo Engine &mdash; Full-Stack Quantitative Finance Platform</div>
+<div class="project-tech">Python, NumPy, SciPy, FastAPI, React 18, Three.js, Chart.js, GSAP</div>
+<ul>
+  <li>Engineered a production-grade options pricing engine with 22 Python modules implementing 9 pricing models including Black-Scholes, Monte Carlo (Standard, Antithetic, Control Variate, Stratified, Sobol), Heston Stochastic Volatility, SABR, Merton Jump-Diffusion, CRR Binomial Tree, Longstaff-Schwartz LSM, and Quanto options</li>
+  <li>Built 36 interactive frontend panels using React 18 (CDN, zero-build) with real-time Greeks computation, implied volatility surface visualization, delta hedging simulation, variance swap pricing, and dividend adjustment models &mdash; deployed on Vercel</li>
+  <li>Developed a comprehensive test suite of 210+ unit tests validating model accuracy against analytical benchmarks, with tolerances calibrated for Monte Carlo convergence and finite-difference Greeks</li>
+  <li>Implemented advanced quantitative features including Nelson-Siegel yield curves, 5 historical volatility estimators (Parkinson, Garman-Klass, Yang-Zhang, EWMA), Greeks heatmaps, and a FastAPI backend with 20+ REST endpoints serving Pydantic-validated requests</li>
+</ul>
+
+<div class="project-title">Frontend E-Commerce Web Application</div>
+<div class="project-tech">React, JavaScript, HTML, CSS</div>
+<ul>
+  <li>Developed a fully responsive e-commerce UI with dynamic product listings, category filtering, and a persistent cart using real-time state management via React hooks and context API</li>
+  <li>Architected a reusable component library and integrated mock REST APIs to simulate backend communication for product data retrieval, search functionality, and order flow handling</li>
+  <li>Optimised cross-device rendering and performance through CSS Grid and Flexbox layouts, achieving consistent UI fidelity across desktop, tablet, and mobile viewports</li>
+</ul>
+
+<div class="section-title">Education</div>
+<div class="edu-school">SRM Institute of Science and Technology, Chennai</div>
+<div class="edu-detail">B.Tech in Artificial Intelligence | 2023 - 2027</div>
+
+<div class="section-title">Certifications</div>
+<ul class="cert-list">
+  <li>Machine Learning with Python - Course Certificate</li>
+  <li>Meta Front-End Developer Professional Certificate</li>
+  <li>Programming in Java - NPTEL Online Certification</li>
+</ul>
+
+</body>
+</html>
