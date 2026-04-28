@@ -23,6 +23,7 @@ Endpoints:
   POST /api/variance-swap      — Variance swap pricing
   POST /api/historical-vol     — Historical volatility estimation
   POST /api/paths              — GBM path simulation
+  POST /api/convergence        — MC convergence test (multi-method vs BS)
   GET  /api/stocks             — List all available stocks by region
   GET  /api/regions            — List available regions
   GET  /api/health             — Health check
@@ -39,7 +40,7 @@ from .schemas import (
     BinomialRequest, DeltaHedgeRequest, QuantoRequest,
     DividendContinuousRequest, DividendDiscreteRequest,
     GreeksSurfaceRequest, HistoricalVolRequest, SABRRequest,
-    VarianceSwapRequest, PathsRequest,
+    VarianceSwapRequest, PathsRequest, ConvergenceTestRequest,
 )
 
 import sys
@@ -70,6 +71,7 @@ from engine.historical_vol import close_to_close_vol, ewma_vol
 from engine.sabr import sabr_smile, sabr_surface
 from engine.variance_swap import price_variance_swap
 from engine.paths import simulate_paths
+from engine.convergence import mc_convergence_test
 
 
 app = FastAPI(
@@ -614,3 +616,22 @@ def get_paths(req: PathsRequest):
         "n_steps": req.n_steps,
         "spot": req.spot,
     }
+
+
+# ─── MC Convergence Test ──────────────────────────────────────────────────
+
+@app.post("/api/convergence")
+def convergence_test(req: ConvergenceTestRequest):
+    """Run MC convergence test across sample sizes and variance-reduction methods."""
+    market = MarketEnvironment(
+        spot=req.spot, rate=req.rate,
+        volatility=req.volatility, maturity=req.maturity,
+    )
+    contract = OptionContract(strike=req.strike, option_type=req.option_type)
+    try:
+        return mc_convergence_test(
+            market, contract,
+            sample_sizes=req.sample_sizes, methods=req.methods,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))

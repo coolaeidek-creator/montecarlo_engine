@@ -1909,6 +1909,113 @@
     /* ═══════════════════════════════════════════════════
        P&L SCENARIO MATRIX
     ═══════════════════════════════════════════════════ */
+    /* ═══════════════════════════════════════════════════
+       CROSS-REGION HEATMAP MATRIX
+    ═══════════════════════════════════════════════════ */
+    function RegionHeatmapMatrix({params,currency}){
+      const{spot,strike,maturity}=params;
+      const cur=currency;
+      const[metric,setMetric]=useState('call');
+
+      const regionList=Object.values(REGIONS);
+      const volShifts=[-10,-5,0,5,10];
+
+      const grid=regionList.map(r=>{
+        return volShifts.map(dv=>{
+          const v=Math.max(0.01,r.vol+dv/100);
+          const g=bsGreeks(spot,strike,r.rate,v,maturity);
+          if(metric==='call') return bsPrice(spot,strike,r.rate,v,maturity,'call');
+          if(metric==='put')  return bsPrice(spot,strike,r.rate,v,maturity,'put');
+          if(metric==='delta')return g.callDelta;
+          if(metric==='vega') return g.vega;
+          if(metric==='theta')return g.callTheta;
+          if(metric==='gamma')return g.gamma;
+          return 0;
+        });
+      });
+
+      const flat=grid.flat();
+      const mn=Math.min(...flat),mx=Math.max(...flat),span=mx-mn||1;
+
+      const cellColor=(v)=>{
+        const t=(v-mn)/span;
+        const c1=[3,7,18],c2=[0,255,136];
+        const r=Math.round(c1[0]+(c2[0]-c1[0])*t);
+        const g=Math.round(c1[1]+(c2[1]-c1[1])*t);
+        const b=Math.round(c1[2]+(c2[2]-c1[2])*t);
+        return `rgba(${r},${g},${b},${0.25+t*0.55})`;
+      };
+
+      const fmtVal=(v)=>{
+        if(metric==='call'||metric==='put') return cur+v.toFixed(2);
+        if(metric==='delta'||metric==='gamma') return v.toFixed(3);
+        return v.toFixed(2);
+      };
+
+      const metricLabel={call:'CALL PRICE',put:'PUT PRICE',delta:'DELTA',vega:'VEGA',theta:'THETA (Call)',gamma:'GAMMA'}[metric];
+
+      return(
+        <div className="glass" style={{marginTop:'1rem',padding:'1rem 1.2rem',overflowX:'auto'}}>
+          <div className="card-head"><span className="card-tag">Cross-Region Heatmap Matrix</span><div className="sdot live"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.45rem',color:'var(--muted)',margin:'0.3rem 0 0.5rem'}}>
+            {metricLabel} across all 4 regions (rows) × volatility shift (cols). Strike={cur}{strike}, T={maturity.toFixed(2)}y. Each region applies its own risk-free rate and baseline vol.
+          </div>
+          <div style={{display:'flex',gap:'0.35rem',marginBottom:'0.55rem',flexWrap:'wrap'}}>
+            {['call','put','delta','vega','theta','gamma'].map(m=>(
+              <button key={m} className={`method-btn${metric===m?' active':''}`}
+                style={{fontSize:'0.48rem',padding:'0.2rem 0.55rem'}} onClick={()=>setMetric(m)}>
+                {m.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <table style={{borderCollapse:'collapse',width:'100%',fontFamily:'JetBrains Mono',fontSize:'0.46rem'}}>
+            <thead>
+              <tr>
+                <th style={{padding:'0.3rem',color:'var(--muted)',textAlign:'left',borderBottom:'1px solid var(--border)'}}>Region ↓ / Vol Shift →</th>
+                {volShifts.map(dv=>(
+                  <th key={dv} style={{padding:'0.3rem',textAlign:'center',borderBottom:'1px solid var(--border)',
+                    color:dv===0?'var(--accent)':'var(--muted)'}}>{dv>0?'+':''}{dv}%</th>
+                ))}
+                <th style={{padding:'0.3rem',textAlign:'right',borderBottom:'1px solid var(--border)',color:'var(--muted)'}}>Rate</th>
+                <th style={{padding:'0.3rem',textAlign:'right',borderBottom:'1px solid var(--border)',color:'var(--muted)'}}>Base Vol</th>
+              </tr>
+            </thead>
+            <tbody>
+              {grid.map((row,i)=>{
+                const r=regionList[i];
+                return(
+                  <tr key={r.id}>
+                    <td style={{padding:'0.3rem',color:r.color,fontWeight:600,borderRight:'1px solid var(--border)',whiteSpace:'nowrap'}}>
+                      {r.flag} {r.name}
+                    </td>
+                    {row.map((v,j)=>(
+                      <td key={j} style={{padding:'0.28rem 0.35rem',textAlign:'center',
+                        background:cellColor(v),color:'#e2e8f0',
+                        border:'1px solid rgba(255,255,255,0.03)',
+                        fontWeight:volShifts[j]===0?700:400}}>
+                        {fmtVal(v)}
+                      </td>
+                    ))}
+                    <td style={{padding:'0.3rem',textAlign:'right',color:'var(--muted)',borderLeft:'1px solid var(--border)'}}>
+                      {(r.rate*100).toFixed(2)}%
+                    </td>
+                    <td style={{padding:'0.3rem',textAlign:'right',color:'var(--muted)'}}>
+                      {(r.vol*100).toFixed(0)}%
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div style={{display:'flex',justifyContent:'space-between',marginTop:'0.5rem',fontFamily:'JetBrains Mono',fontSize:'0.4rem',color:'var(--muted)'}}>
+            <span>LOW: {fmtVal(mn)}</span>
+            <span>HIGH: {fmtVal(mx)}</span>
+            <span>SPREAD: {fmtVal(mx-mn)}</span>
+          </div>
+        </div>
+      );
+    }
+
     function PnlMatrix({params,currency}){
       const{spot,strike,rate,vol,maturity}=params;
       const cur=currency;
@@ -3288,6 +3395,144 @@
     }
 
     /* ═══════════════════════════════════════════════════
+       MC CONVERGENCE TEST (multi-method)
+       Mirrors backend /api/convergence — compares all variance-
+       reduction methods against BS reference across sample sizes.
+    ═══════════════════════════════════════════════════ */
+    function ConvergenceTestPanel({params,currency}){
+      const{spot,strike,rate,vol,maturity}=params;
+      const cur=currency;
+      const[ctRes,setCtRes]=useState(null);
+      const[ctBusy,setCtBusy]=useState(false);
+      const chartRef=useRef(null);
+      const chartInst=useRef(null);
+
+      const fitRate=(ns,ses)=>{
+        const valid=ns.map((n,i)=>[n,ses[i]]).filter(([n,s])=>n>0&&s>0);
+        if(valid.length<2)return null;
+        const xs=valid.map(v=>Math.log(v[0])),ys=valid.map(v=>Math.log(v[1]));
+        const n=xs.length,sx=xs.reduce((a,b)=>a+b,0),sy=ys.reduce((a,b)=>a+b,0);
+        const sxx=xs.reduce((a,b)=>a+b*b,0),sxy=xs.reduce((a,b,i)=>a+b*ys[i],0);
+        return(n*sxy-sx*sy)/(n*sxx-sx*sx);
+      };
+
+      const runTest=()=>{
+        setCtBusy(true);
+        setTimeout(()=>{
+          const sizes=[500,1000,2000,5000,10000,20000,50000,100000];
+          const bsRef=bsPrice(spot,strike,rate,vol,maturity,'call');
+          const methods=[
+            {key:'standard',label:'Standard',fn:mcPrice,color:'#e2e8f0'},
+            {key:'antithetic',label:'Antithetic',fn:mcPriceAntithetic,color:'#00ff88'},
+            {key:'control_variate',label:'Control Var',fn:mcPriceControlVariate,color:'#00d4ff'},
+            {key:'stratified',label:'Stratified',fn:mcPriceStratified,color:'#a855f7'},
+          ];
+
+          const methodResults={};
+          for(const m of methods){
+            const traj=sizes.map(n=>{
+              const r=m.fn(spot,strike,rate,vol,maturity,n,'call');
+              const absErr=Math.abs(r.price-bsRef);
+              return{n,price:r.price,std_error:r.se,abs_error:absErr,rel_error_pct:bsRef>0?absErr/bsRef*100:0,ci_width:r.ci[1]-r.ci[0]};
+            });
+            const finalRow=traj[traj.length-1];
+            methodResults[m.key]={
+              label:m.label,color:m.color,
+              trajectory:traj,
+              convergence_rate:fitRate(sizes,traj.map(t=>t.std_error)),
+              final_price:finalRow.price,
+              final_std_error:finalRow.std_error,
+              final_abs_error:finalRow.abs_error,
+              final_rel_error_pct:finalRow.rel_error_pct,
+            };
+          }
+          const stdSE=methodResults.standard?.final_std_error;
+          for(const k of Object.keys(methodResults)){
+            const fse=methodResults[k].final_std_error;
+            methodResults[k].variance_reduction_factor=stdSE>0&&fse>0?stdSE/fse:null;
+          }
+
+          setCtRes({sample_sizes:sizes,bs_reference:bsRef,methods:methodResults});
+          setCtBusy(false);
+
+          setTimeout(()=>{
+            if(!chartRef.current)return;
+            if(chartInst.current)chartInst.current.destroy();
+            const datasets=Object.entries(methodResults).map(([k,m])=>({
+              label:m.label,data:m.trajectory.map(t=>t.std_error),
+              borderColor:m.color,backgroundColor:'transparent',
+              fill:false,tension:0.2,pointRadius:2,borderWidth:1.5,
+            }));
+            chartInst.current=new Chart(chartRef.current,{
+              type:'line',
+              data:{labels:sizes.map(n=>n>=1000?(n/1000)+'K':n+''),datasets},
+              options:{
+                responsive:true,maintainAspectRatio:false,
+                plugins:{
+                  legend:{labels:{color:'rgba(226,232,240,0.6)',font:{family:'JetBrains Mono',size:8},boxWidth:10}},
+                  tooltip:{backgroundColor:'rgba(3,7,18,0.92)',titleColor:'#e2e8f0',bodyColor:'#e2e8f0',
+                    callbacks:{label:c=>c.dataset.label+': SE='+c.raw.toFixed(5)}},
+                },
+                scales:{
+                  x:{ticks:{color:'rgba(255,255,255,0.3)',font:{family:'JetBrains Mono',size:7}},grid:{color:'rgba(255,255,255,0.04)'},title:{display:true,text:'Simulations (N)',color:'rgba(226,232,240,0.35)',font:{family:'JetBrains Mono',size:8}}},
+                  y:{type:'logarithmic',ticks:{color:'rgba(255,255,255,0.3)',font:{family:'JetBrains Mono',size:7}},grid:{color:'rgba(255,255,255,0.04)'},title:{display:true,text:'Standard Error (log)',color:'rgba(226,232,240,0.35)',font:{family:'JetBrains Mono',size:8}}},
+                }
+              }
+            });
+          },50);
+
+          gsap.fromTo('.ct-result',{y:15,opacity:0},{y:0,opacity:1,duration:0.5,ease:'back.out(1.4)'});
+        },30);
+      };
+
+      return(
+        <div className="glass" style={{marginTop:'1.5rem',padding:'1rem 1.2rem'}}>
+          <div className="card-head"><span className="card-tag">Convergence Test (Multi-Method)</span><div className="sdot"/></div>
+          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.48rem',color:'var(--muted)',margin:'0.4rem 0 0.6rem'}}>
+            Compares all variance-reduction methods against BS reference across N=500..100K. Mirrors backend /api/convergence. Validates SE ∝ N<sup>−0.5</sup>.
+          </div>
+          <button className="run-btn" style={{fontSize:'0.6rem',padding:'0.5rem 1.2rem'}} onClick={runTest} disabled={ctBusy}>
+            {ctBusy?'RUNNING TEST...':'RUN CONVERGENCE TEST'}
+          </button>
+          {ctRes&&(
+            <div className="ct-result" style={{marginTop:'0.7rem'}}>
+              <div style={{height:'220px',marginBottom:'0.5rem'}}><canvas ref={chartRef}/></div>
+              <table style={{width:'100%',borderCollapse:'collapse',fontFamily:'JetBrains Mono',fontSize:'0.44rem'}}>
+                <thead>
+                  <tr style={{borderBottom:'1px solid var(--border)'}}>
+                    <th style={{padding:'0.2rem',textAlign:'left',color:'var(--muted)'}}>Method</th>
+                    <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>Final Price</th>
+                    <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>SE</th>
+                    <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>|Err|</th>
+                    <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>Rel%</th>
+                    <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>VR×</th>
+                    <th style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>Slope</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(ctRes.methods).map(([k,m])=>(
+                    <tr key={k} style={{borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                      <td style={{padding:'0.2rem',color:m.color}}>{m.label}</td>
+                      <td style={{padding:'0.2rem',textAlign:'right',color:'var(--text)'}}>{cur}{m.final_price.toFixed(4)}</td>
+                      <td style={{padding:'0.2rem',textAlign:'right',color:'#f97316'}}>{m.final_std_error.toFixed(5)}</td>
+                      <td style={{padding:'0.2rem',textAlign:'right',color:m.final_abs_error<0.1?'#00ff88':'var(--text)'}}>{m.final_abs_error.toFixed(4)}</td>
+                      <td style={{padding:'0.2rem',textAlign:'right',color:m.final_rel_error_pct<1?'#00ff88':m.final_rel_error_pct<5?'var(--text)':'#f97316'}}>{m.final_rel_error_pct.toFixed(2)}%</td>
+                      <td style={{padding:'0.2rem',textAlign:'right',color:'#a855f7'}}>{m.variance_reduction_factor?m.variance_reduction_factor.toFixed(2)+'×':'—'}</td>
+                      <td style={{padding:'0.2rem',textAlign:'right',color:'var(--muted)'}}>{m.convergence_rate?m.convergence_rate.toFixed(3):'—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{marginTop:'0.4rem',fontFamily:'JetBrains Mono',fontSize:'0.42rem',color:'var(--muted)'}}>
+                BS Reference: {cur}{ctRes.bs_reference.toFixed(4)} · Theoretical SE slope: −0.500 · VR× = SE_standard / SE_method
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════
        SABR SMILE PANEL
     ═══════════════════════════════════════════════════ */
     function SABRPanel({params,currency}){
@@ -4224,9 +4469,9 @@
           </div>
           <div style={{display:'flex',justifyContent:'center',gap:'1.5rem',flexWrap:'wrap',marginBottom:'0.5rem'}}>
             {[
-              ['22','Engine Modules'],['36','Interactive Panels'],['210+','Unit Tests'],
+              ['23','Engine Modules'],['37','Interactive Panels'],['222+','Unit Tests'],
               ['9','Pricing Models'],['5','MC Methods'],['40','Global Stocks'],
-              ['4','Regions'],['34','API Endpoints'],
+              ['4','Regions'],['35','API Endpoints'],
             ].map(([n,l])=>(
               <div key={l} style={{textAlign:'center'}}>
                 <div style={{fontFamily:'JetBrains Mono',fontSize:'0.7rem',color:'var(--accent)'}}>{n}</div>
@@ -4488,6 +4733,8 @@
               <StressTestPanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── P&L SCENARIO MATRIX ──</div>
               <PnlMatrix params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── CROSS-REGION HEATMAP MATRIX ──</div>
+              <RegionHeatmapMatrix params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── TIME DECAY ──</div>
               <TimeDecayChart params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── VOLATILITY SMILE ──</div>
@@ -4508,6 +4755,8 @@
               <CorrelationPanel region={region} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── CONVERGENCE DIAGNOSTIC ──</div>
               <ConvergenceDiagPanel params={params} currency={cur}/>
+              <div className="section-label" style={{marginTop:'1.5rem'}}>── CONVERGENCE TEST (MULTI-METHOD) ──</div>
+              <ConvergenceTestPanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── SABR VOLATILITY MODEL ──</div>
               <SABRPanel params={params} currency={cur}/>
               <div className="section-label" style={{marginTop:'1.5rem'}}>── GBM PATH VISUALIZATION ──</div>

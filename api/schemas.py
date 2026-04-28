@@ -267,3 +267,22 @@ class PathsRequest(BaseModel):
     n_simulations: int = Field(20, gt=0, le=200, description="Number of paths to return")
     n_steps: int = Field(252, gt=0, le=1000)
     antithetic: bool = False
+
+
+class ConvergenceTestRequest(BaseModel):
+    """Request for Monte Carlo convergence test across sample sizes and methods."""
+    spot: float = Field(..., gt=0)
+    strike: float = Field(..., gt=0)
+    rate: float
+    volatility: float = Field(..., gt=0)
+    maturity: float = Field(..., gt=0)
+    option_type: Literal["call", "put"] = "call"
+    sample_sizes: Optional[list] = Field(
+        None,
+        description="List of sample sizes to test (defaults to [500..100K])",
+    )
+    methods: Optional[list] = Field(
+        None,
+        description="MC methods to compare (subset of standard, antithetic, "
+                    "control_variate, stratified, sobol)",
+    )
